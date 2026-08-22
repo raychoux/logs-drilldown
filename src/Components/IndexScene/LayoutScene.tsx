@@ -6,15 +6,15 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { SceneComponentProps, sceneGraph, SceneObject, SceneObjectBase, SceneObjectState } from '@grafana/scenes';
 import { useStyles2 } from '@grafana/ui';
 
-import { PageSlugs } from '../../services/enums';
-import { logger } from '../../services/logger';
-import { PLUGIN_ID } from '../../services/plugin';
-import { getDrilldownSlug } from '../../services/routing';
 import { IndexScene } from './IndexScene';
 import { InterceptBanner } from './InterceptBanner';
 import { LevelsVariableScene } from './LevelsVariableScene';
 import { LineFilterVariablesScene } from './LineFilter/LineFilterVariablesScene';
 import { VariableLayoutScene } from './VariableLayoutScene';
+import { PageSlugs } from 'services/enums';
+import { logger } from 'services/logger';
+import { PLUGIN_ID } from 'services/plugin';
+import { getDrilldownSlug } from 'services/routing';
 
 interface LayoutSceneState extends SceneObjectState {
   interceptDismissed: boolean;
@@ -49,7 +49,7 @@ export class LayoutScene extends SceneObjectBase<LayoutSceneState> {
 
   static Component = ({ model }: SceneComponentProps<LayoutScene>) => {
     const indexScene = sceneGraph.getAncestor(model, IndexScene);
-    const { contentScene } = indexScene.useState();
+    const { contentScene, embedded } = indexScene.useState();
     const { interceptDismissed, variableLayout } = model.useState();
     const styles = useStyles2(getStyles);
 
@@ -60,7 +60,7 @@ export class LayoutScene extends SceneObjectBase<LayoutSceneState> {
     return (
       <div className={styles.bodyContainer}>
         <div className={styles.container}>
-          {!interceptDismissed && (
+          {!embedded && !interceptDismissed && (
             <InterceptBanner
               onRemove={() => {
                 model.dismiss();

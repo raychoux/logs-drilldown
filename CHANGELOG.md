@@ -1,5 +1,45 @@
 # Changelog
 
+## [2.5.1](https://github.com/grafana/logs-drilldown/compare/v2.5.0...v2.5.1) (2026-08-12)
+
+
+### 🐛 Bug Fixes
+
+* **assistant:** update to latest and fix context bugs ([#2041](https://github.com/grafana/logs-drilldown/issues/2041)) ([807ae88](https://github.com/grafana/logs-drilldown/commit/807ae881dc61610c03da330bd94df1ec6d5e065d))
+* **deps:** bump pnpm overrides for CVE remediation ([#2036](https://github.com/grafana/logs-drilldown/issues/2036)) ([0f02b5c](https://github.com/grafana/logs-drilldown/commit/0f02b5c832006e348d81ce1479f0685f4351ad4c))
+* **deps:** bump pnpm overrides for CVE remediation ([#2044](https://github.com/grafana/logs-drilldown/issues/2044)) ([b211e84](https://github.com/grafana/logs-drilldown/commit/b211e84d54a7d0b96b10b55fde84b720e7792b4e))
+* **InterceptBanner:** add padding around the message ([#2043](https://github.com/grafana/logs-drilldown/issues/2043)) ([b2f7e89](https://github.com/grafana/logs-drilldown/commit/b2f7e896866ff448e22a9a9e4f97fcefe6a014ed))
+* **levels:** use gray (dimgray) for debug level color ([#2021](https://github.com/grafana/logs-drilldown/issues/2021)) ([e8ddf8d](https://github.com/grafana/logs-drilldown/commit/e8ddf8d3dc9ada0c274596d30958d6026428e037))
+
+
+### 📝 Documentation
+
+* add local project context for docs skills ([#2046](https://github.com/grafana/logs-drilldown/issues/2046)) ([0b9a70d](https://github.com/grafana/logs-drilldown/commit/0b9a70d0efeebf47e2175bcc670e647622ead986))
+* document recent UI changes and standardize product name usage ([#2045](https://github.com/grafana/logs-drilldown/issues/2045)) ([fa723fe](https://github.com/grafana/logs-drilldown/commit/fa723fe13e48cf4c7603275bb612e2ced4adf994))
+
+
+### 🧹 Chore
+
+* **deps:** add pnpm supply-chain security settings ([#2006](https://github.com/grafana/logs-drilldown/issues/2006)) ([459077f](https://github.com/grafana/logs-drilldown/commit/459077f75e0e7bd7b11b8edd9de9fb0e3e3d9f3d))
+* **release:** show chore in changelog ([#2037](https://github.com/grafana/logs-drilldown/issues/2037)) ([b7cdf76](https://github.com/grafana/logs-drilldown/commit/b7cdf76f7d3159f7ce59f1d544a8d507dacb317f))
+
+## [2.5.0](https://github.com/grafana/logs-drilldown/compare/v2.4.0...v2.5.0) (2026-08-04)
+
+
+### 🎉 Features
+
+* **LogsVolumePanel:** update color for the visible range ([#2019](https://github.com/grafana/logs-drilldown/issues/2019)) ([a85b467](https://github.com/grafana/logs-drilldown/commit/a85b46795aae759feeacde34ffc5213128d1bb89))
+
+
+### 🐛 Bug Fixes
+
+* **crypto:** use uuid ([#2017](https://github.com/grafana/logs-drilldown/issues/2017)) ([a026605](https://github.com/grafana/logs-drilldown/commit/a0266058a1191e867927e73c652dbac7a82aae50))
+* **deps:** bump brace-expansion pnpm overrides for CVE remediation ([#2002](https://github.com/grafana/logs-drilldown/issues/2002)) ([5132ae2](https://github.com/grafana/logs-drilldown/commit/5132ae2a482c269e05815bd935a5087e8594cd22))
+* **deps:** resolve pnpm audit vulnerabilities ([#2005](https://github.com/grafana/logs-drilldown/issues/2005)) ([2568a22](https://github.com/grafana/logs-drilldown/commit/2568a2237c975dbcb0f8baad2c1b81e014c0b3cc))
+* **deps:** resolve pnpm audit vulnerabilities ([#2012](https://github.com/grafana/logs-drilldown/issues/2012)) ([8567ef3](https://github.com/grafana/logs-drilldown/commit/8567ef3e76d18d036f725ab9cd1da6d1bfe1f933))
+* **embed:** do not show the welcome banner in embed ([#2003](https://github.com/grafana/logs-drilldown/issues/2003)) ([1a8ac7f](https://github.com/grafana/logs-drilldown/commit/1a8ac7f563a62ead0411ee193c8446c06eed7415))
+* **header:** use ButtonGroup for plugin header toolbar ([#2009](https://github.com/grafana/logs-drilldown/issues/2009)) ([f802cc4](https://github.com/grafana/logs-drilldown/commit/f802cc414a75568cf495a993bd2e78fc5c20ca95))
+
 ## [2.4.0](https://github.com/grafana/logs-drilldown/compare/v2.3.0...v2.4.0) (2026-07-20)
 
 

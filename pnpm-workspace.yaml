@@ -1,6 +1,29 @@
 packages:
   - '.'
 
+# https://pnpm.io/supply-chain-security
+# Same as passing --frozen-lockfile on every pnpm install (CI uses this via plugin-ci-workflows too).
+frozenLockfile: true
+# Disable package lifecycle scripts (postinstall, etc.) on install.
+ignoreScripts: true
+# Five days in minutes (5 × 24 × 60).
+minimumReleaseAge: 7200
+# Fail install if a package's trust evidence is weaker than an earlier release (e.g. lost trusted publisher).
+trustPolicy: no-downgrade
+# Exemptions for entries that cannot resolve to an attested version: each is a
+# transitive dep whose parent range can't reach one. Pinned to exact versions so
+# any new version has to be re-reviewed. Re-audit as these trees move.
+trustPolicyExclude:
+  - 'chokidar@4.0.3' # fork-ts-checker-webpack-plugin wants ^4; 4.0.3 is last 4.x (3.6.0 was attested)
+  - 'react-redux@8.1.3 || 9.2.0' # @hello-pangea/dnd wants ^8 (8.1.2 attested) or ^9 via @grafana/ui
+  - 'semver@6.3.1' # @babel/core (via jest tooling) wants ^6; 6.3.1 is last 6.x
+  - 'ua-parser-js@1.0.41' # @grafana/faro-web-sdk pins this exact version
+  - '@reduxjs/toolkit@2.10.1' # @grafana/api-clients pins this exact version
+# Transitive deps must come from the registry/workspace; block git/tarball URLs except on direct deps.
+blockExoticSubdeps: true
+# Requires every dependency with a lifecycle script to be listed in allowBuilds
+strictDepBuilds: true
+
 allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
@@ -8,25 +31,47 @@ allowBuilds:
   protobufjs: true
   unrs-resolver: true
 
+minimumReleaseAgeExclude:
+  - brace-expansion@1.1.18
+
 overrides:
-  react-router-dom: 7.18.0
+  # react-router itself is deliberately not overridden. The 6.30.4 copy comes from
+  # @grafana/ui -> react-router-dom-v5-compat@6.30.4, which imports UNSAFE_useRoutesImpl,
+  # UNSAFE_useRouteId and UNSAFE_logV6DeprecationWarnings — none of which react-router 7
+  # exports. A bare `react-router` override would collapse both majors onto 7.x and break
+  # @grafana/ui at runtime.
+  # The 7.x advisory (GHSA-qwww-vcr4-c8h2, <7.18.2) is fixed below: react-router-dom@7.18.2
+  # pins react-router 7.18.2 exactly, so the core fix arrives transitively.
+  # Still flagged: GHSA-wrjc-x8rr-h8h6 / GHSA-337j-9hxr-rhxg (>=6.0.0 <7.18.0) match the
+  # 6.30.4 copy. The react-router 6.x line ends at 6.30.4 — there is no 6.x patch, so this
+  # needs an upstream @grafana/ui bump off v5-compat, not an override here.
+  react-router-dom: 7.18.2
   uuid: 14.0.1
   immutable: 5.1.8
-  dompurify: 3.4.11
+  dompurify: 3.4.13
   serialize-javascript: 7.0.6
   strip-ansi: 6.0.1
-  js-yaml: 4.3.0
+  js-yaml: 4.3.1
   # Security patches for transitive vulnerabilities (pnpm audit)
-  fast-uri: 3.1.2
+  fast-uri: 3.1.5
+  undici: 8.9.0
   protobufjs: 8.6.5
   js-cookie: 3.0.8
   '@ungap/structured-clone': 1.3.2
-  'brace-expansion@^5': 5.0.6
+  # Each line is pinned to its newest release. GHSA-mh99-v99m-4gvg is only patched in
+  # 5.0.8 with no 1.x/2.x backport, and v5 changed the CJS export shape, so forcing the
+  # whole tree onto v5 breaks minimatch 3/9 ("expand is not a function"). The 1.x/2.x
+  # pins below stay flagged by `pnpm audit` until minimatch's consumers move to v10.
+  'brace-expansion@^1': 1.1.18
+  'brace-expansion@^2': 2.1.4
+  'brace-expansion@^5': 5.0.9
   'ws@^8': 8.21.0
   'ws@>=7.0.0 <7.5.11': 7.5.11
   qs: 6.15.3
   '@babel/core@<=7.29.0': 7.29.7
   '@opentelemetry/core@<2.8.0': 2.8.0
-  tar@<=7.5.15: 7.5.19
+  tar@<=7.5.20: 7.5.22
   webpack: 5.108.1
   'websocket-driver@<0.7.5': 0.7.5
+  'postcss@<8.5.18': 8.5.23
+  nanoid: 3.3.17
