@@ -45,7 +45,8 @@ import { LogOptionsScene } from './LogOptionsScene';
 import { LogsListScene } from './LogsListScene';
 import { ErrorType, LogsPanelError } from './LogsPanelError';
 import { LogsVolumePanel, logsVolumePanelKey } from './LogsVolume/LogsVolumePanel';
-import { ServiceScene } from './ServiceScene';
+import { PluginLogsList } from './PluginLogsList';
+import { getLogsPanelFrame, ServiceScene } from './ServiceScene';
 import { LineFilterCaseSensitive, LineFilterOp } from 'services/filterTypes';
 import { isDedupStrategy, isLogsSortOrder } from 'services/guards';
 import { logsControlsSupported } from 'services/panel';
@@ -61,6 +62,7 @@ interface LogsPanelSceneState extends SceneObjectState {
   error?: string;
   errorType?: ErrorType;
   prettifyLogMessage: boolean;
+  selectedRow?: import('./LogDetailsDialog').PluginLogRow;
   series: DataFrame[];
   sortOrder: LogsSortOrder;
   wrapLogMessage: boolean;
@@ -328,7 +330,7 @@ export class LogsPanelScene extends SceneObjectBase<LogsPanelSceneState> {
       .setShowMenuAlways(true)
       .setOption('enableInfiniteScrolling', true)
       .setOption('onNewLogsReceived', this.updateVisibleRange)
-      .setOption('logRowMenuIconsAfter', [<CopyLinkButton onClick={this.handleShareLogLineClick} key={0} />])
+      .setOption('logRowMenuIconsAfter', [<CopyLinkButton onClick={this.handleShareLogLineClick} key="copy-link" />])
       .setHeaderActions(
         new LogOptionsScene({
           lineLimitScene: new LineLimitScene({ error: this.state.error }),
@@ -525,13 +527,22 @@ export class LogsPanelScene extends SceneObjectBase<LogsPanelSceneState> {
   }
 
   public static Component = ({ model }: SceneComponentProps<LogsPanelScene>) => {
-    const { body, canClearFilters, error, errorType } = model.useState();
+    const { body, canClearFilters, error, errorType, selectedRow } = model.useState();
+    const { data } = sceneGraph.getData(model).useState();
     const styles = useStyles2(getPanelWrapperStyles);
 
     if (body) {
       return (
         <span className={styles.panelWrapper}>
-          {!error && <body.Component model={body} />}
+          {!error && (
+            <PluginLogsList
+              dataFrame={getLogsPanelFrame(data)}
+              onDismiss={() => model.setState({ selectedRow: undefined })}
+              onSelect={(row) => model.setState({ selectedRow: row })}
+              selectedRow={selectedRow}
+              title={body.state.title ?? 'Logs'}
+            />
+          )}
           {error && (
             <LogsPanelError
               error={error}

@@ -73,6 +73,15 @@ export const testIds = {
     header: 'data-testid Panel header Logs',
     radio: 'data-testid radio-button',
   },
+  logDetails: {
+    dialog: 'data-testid log-details-dialog',
+    logLine: 'data-testid log-details-log-line',
+    metadata: 'data-testid log-details-metadata',
+    monitor: 'data-testid log-details-monitor',
+    search: 'data-testid log-details-search',
+    fields: 'data-testid log-details-fields',
+    row: 'data-testid log-details-row',
+  },
   patterns: {
     buttonExcludedPattern: 'data-testid button-excluded-pattern',
     buttonIncludedPattern: 'data-testid button-included-pattern',
