@@ -94,6 +94,31 @@ test('captures the custom dialog from native Logs and Table renderers', async ({
   await capture(page, testInfo, 'log-details-native-table');
 });
 
+test('shows a pod monitor dashboard action for pod metadata', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await mkdir(artifactDir, { recursive: true });
+
+  const explorePage = new ExplorePage(page, testInfo);
+  await page.setViewportSize({ height: 1000, width: 1440 });
+  await explorePage.clearLocalStorage();
+  await explorePage.gotoServicesBreakdownOldUrl('tempo-ingester', reviewFrom, reviewTo);
+  await explorePage.assertNotLoading();
+
+  const nativeLogRow = page.locator('.unwrapped-log-line').nth(1);
+  await expect(nativeLogRow).toBeVisible({ timeout: 45_000 });
+  await nativeLogRow.click();
+
+  const monitorPod = page.getByTestId(testIds.logDetails.monitorPod);
+  await expect(monitorPod).toBeVisible();
+  await expect(monitorPod).toHaveText('Monitor pod');
+  await expect(monitorPod).toHaveAttribute('data-pod', /tempo-ingester-/);
+  await expect(monitorPod).toHaveAttribute(
+    'data-dashboard-url',
+    /\/d\/k8s_views_pods\/kubernetes-views-pods\?.*var-pod=tempo-ingester-/
+  );
+  await capture(page, testInfo, 'log-details-pod-monitor');
+});
+
 test('captures Show Context with wrapping disabled by default', async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   await mkdir(artifactDir, { recursive: true });

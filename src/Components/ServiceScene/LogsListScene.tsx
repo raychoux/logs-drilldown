@@ -2,9 +2,11 @@ import React, { useEffect, useLayoutEffect, useRef } from 'react';
 
 import { css } from '@emotion/css';
 import { useResizeObserver } from '@react-aria/utils';
+import { createRoot, Root } from 'react-dom/client';
 
-import { LoadingState, PanelData, shallowCompare } from '@grafana/data';
-import { locationService, useChromeHeaderHeight } from '@grafana/runtime';
+import { DataFrame, LoadingState, PanelData, shallowCompare } from '@grafana/data';
+import { t } from '@grafana/i18n';
+import { config, locationService, useChromeHeaderHeight } from '@grafana/runtime';
 import {
   AdHocFiltersVariable,
   SceneComponentProps,
@@ -18,6 +20,7 @@ import {
   SceneTimeRangeLike,
 } from '@grafana/scenes';
 import { Options } from '@grafana/schema/dist/esm/raw/composable/logs/panelcfg/x/LogsPanelCfg_types.gen';
+import { Button } from '@grafana/ui';
 
 import { ActionBarScene } from './ActionBarScene';
 import { JSONLogsScene } from './JSONLogsScene';
@@ -34,8 +37,10 @@ import { SelectedTableRow } from 'Components/Table/LogLineCellComponent';
 import { getFeatureFlag } from 'featureFlags/openFeature';
 import { reportAppInteraction, USER_EVENTS_ACTIONS, USER_EVENTS_PAGES } from 'services/analytics';
 import { areArraysEqual, areArraysStrictlyEqual } from 'services/comparison';
+import { LabelType } from 'services/fieldsTypes';
 import { logger } from 'services/logger';
-import { isEmptyLogsResult } from 'services/logsFrame';
+import { isEmptyLogsResult, parseLogsFrame } from 'services/logsFrame';
+import { getLabelTypeFromFrame } from 'services/lokiQuery';
 import { narrowLogsVisualizationType, narrowSelectedTableRow, unknownToStrings } from 'services/narrowing';
 import { getRouteParams } from 'services/routing';
 import {
@@ -49,6 +54,7 @@ import {
   setDisplayedFieldsInStorage,
   setLogsVisualizationType,
 } from 'services/store';
+import { testIds } from 'services/testIds';
 import { getLabelsVariable } from 'services/variableGetters';
 import { getVariablesThatCanBeCleared } from 'services/variableHelpers';
 
@@ -82,6 +88,107 @@ const nativeLogDetailsBottomOffset = 8;
 const nativeLogDetailsInlineWidth = '50%';
 const nativeLogContextDialogSelector = '[role="dialog"]:has([data-testid="revert-button"])';
 const nativeLogContextWrapSelector = 'input[role="switch"]';
+const nativeLogDetailsCloseSelector = 'button[aria-label^="Close log details"]';
+const podDashboardPath = '/d/k8s_views_pods/kubernetes-views-pods';
+
+export interface PodMonitorTarget {
+  dashboardUrl: string;
+  pod: string;
+}
+
+interface DataFrameRow {
+  dataFrame: DataFrame;
+  index: number;
+}
+
+function normalizeLogText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function getCandidateRows(dataFrames: DataFrame[], rowIndex: number, rowText?: string): DataFrameRow[] {
+  const indexedRows = dataFrames
+    .filter((dataFrame) => rowIndex >= 0 && rowIndex < dataFrame.length)
+    .map((dataFrame) => ({ dataFrame, index: rowIndex }));
+  if (!rowText) {
+    return indexedRows;
+  }
+
+  const normalizedRowText = normalizeLogText(rowText);
+  const matchesRowText = ({ dataFrame, index }: DataFrameRow) => {
+    const body = parseLogsFrame(dataFrame)?.bodyField.values[index];
+    return body != null && normalizedRowText.includes(normalizeLogText(String(body)));
+  };
+  const indexedMatches = indexedRows.filter(matchesRowText);
+  if (indexedMatches.length > 0) {
+    return indexedMatches;
+  }
+
+  const textMatches: DataFrameRow[] = [];
+  for (const dataFrame of dataFrames) {
+    for (let index = 0; index < dataFrame.length; index++) {
+      const candidate = { dataFrame, index };
+      if (matchesRowText(candidate)) {
+        textMatches.push(candidate);
+      }
+    }
+  }
+  return textMatches.length > 0 ? textMatches : indexedRows;
+}
+
+function getTypedRowValue(row: DataFrameRow, keyMatcher: (key: string) => boolean): string | undefined {
+  const labels = parseLogsFrame(row.dataFrame)?.getLogFrameLabelsAsLabels()?.[row.index] ?? {};
+  for (const [key, value] of Object.entries(labels)) {
+    const type = getLabelTypeFromFrame(key, row.dataFrame, row.index);
+    if (
+      keyMatcher(key.toLowerCase()) &&
+      (type === LabelType.Indexed || type === LabelType.StructuredMetadata) &&
+      value != null &&
+      String(value).trim()
+    ) {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+export function getPodMonitorTarget(
+  dataFrames: DataFrame[],
+  rowIndex: number,
+  currentSearch = '',
+  rowText?: string,
+  appSubUrl = config.appSubUrl ?? ''
+): PodMonitorTarget | undefined {
+  for (const row of getCandidateRows(dataFrames, rowIndex, rowText)) {
+    const pod = getTypedRowValue(row, (key) => key.includes('pod'));
+    if (!pod) {
+      continue;
+    }
+
+    const namespace = getTypedRowValue(row, (key) => key.includes('namespace'));
+    const cluster = getTypedRowValue(row, (key) => key.includes('cluster'));
+    const sourceParams = new URLSearchParams(currentSearch);
+    const dashboardParams = new URLSearchParams();
+    for (const key of ['from', 'to', 'timezone']) {
+      const value = sourceParams.get(key);
+      if (value) {
+        dashboardParams.set(key, value);
+      }
+    }
+    dashboardParams.set('var-pod', pod);
+    if (namespace) {
+      dashboardParams.set('var-namespace', namespace);
+    }
+    if (cluster) {
+      dashboardParams.set('var-cluster', cluster);
+    }
+
+    return {
+      dashboardUrl: `${appSubUrl}${podDashboardPath}?${dashboardParams.toString()}`,
+      pod,
+    };
+  }
+  return undefined;
+}
 
 export function initializeNativeLogContextWrap(
   root: ParentNode,
@@ -146,6 +253,10 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
     return this.panelWrapperEl;
   }
 
+  public getVisibleLogSeries(): DataFrame[] {
+    return sceneGraph.getData(this).state.data?.series ?? this.logsPanelScene?.state.series ?? [];
+  }
+
   public syncPanelHeightFromWrapper = () => {
     if (!this.state.panel || !this.panelWrapperEl) {
       return;
@@ -204,6 +315,19 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       let resetAnchorTimer: ReturnType<typeof setTimeout> | undefined;
       let styledPane: HTMLElement | undefined;
       let originalPaneStyle: string | null = null;
+      let selectedLogIndex: number | undefined;
+      let selectedLogText: string | undefined;
+      let podMonitorContainer: HTMLSpanElement | undefined;
+      let podMonitorRoot: Root | undefined;
+      let renderedPodMonitorUrl: string | undefined;
+
+      const removePodMonitorAction = () => {
+        podMonitorRoot?.unmount();
+        podMonitorContainer?.remove();
+        podMonitorRoot = undefined;
+        podMonitorContainer = undefined;
+        renderedPodMonitorUrl = undefined;
+      };
 
       const applyOriginalPaneStyle = () => {
         if (!styledPane) {
@@ -265,9 +389,55 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         });
       };
 
+      const updatePodMonitorAction = (pane: HTMLElement) => {
+        const visibleLogSeries = model.getVisibleLogSeries();
+        const target =
+          selectedLogIndex === undefined
+            ? undefined
+            : getPodMonitorTarget(
+                visibleLogSeries,
+                selectedLogIndex,
+                locationService.getLocation().search,
+                selectedLogText
+              );
+        const closeButton = pane.querySelector<HTMLButtonElement>(nativeLogDetailsCloseSelector);
+        const buttonGroup = closeButton?.parentElement;
+        const toolbar = buttonGroup?.parentElement;
+        if (!target || !buttonGroup || !toolbar) {
+          removePodMonitorAction();
+          return;
+        }
+
+        if (!podMonitorContainer || podMonitorContainer.parentElement !== toolbar) {
+          removePodMonitorAction();
+          podMonitorContainer = ownerDocument.createElement('span');
+          toolbar.insertBefore(podMonitorContainer, buttonGroup);
+          podMonitorRoot = createRoot(podMonitorContainer);
+        }
+        if (renderedPodMonitorUrl === target.dashboardUrl) {
+          return;
+        }
+
+        renderedPodMonitorUrl = target.dashboardUrl;
+        podMonitorRoot?.render(
+          <Button
+            data-dashboard-url={target.dashboardUrl}
+            data-pod={target.pod}
+            data-testid={testIds.logDetails.monitorPod}
+            icon="apps"
+            onClick={() => locationService.push(target.dashboardUrl)}
+            size="sm"
+            variant="secondary"
+          >
+            {t('components.service-scene.logs-list-scene.monitor-pod', 'Monitor pod')}
+          </Button>
+        );
+      };
+
       const updateDetailsPane = () => {
         const pane = ownerDocument.querySelector<HTMLElement>(nativeLogDetailsSelector);
         if (!pane) {
+          removePodMonitorAction();
           restorePaneStyle();
           if (resetAnchorTimer === undefined) {
             resetAnchorTimer = setTimeout(() => {
@@ -298,6 +468,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         } else {
           restorePaneStyle();
         }
+        updatePodMonitorAction(pane);
       };
 
       const updateNativeOverlays = () => {
@@ -305,21 +476,41 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         updateDetailsPane();
       };
 
+      const handleLogRowClick = (event: Event) => {
+        const ElementConstructor = ownerDocument.defaultView?.Element;
+        if (!ElementConstructor || !(event.target instanceof ElementConstructor)) {
+          return;
+        }
+        const logRow = event.target.closest<HTMLElement>('[data-log-index]');
+        if (!logRow || !root.contains(logRow)) {
+          return;
+        }
+        const rowIndex = Number(logRow.dataset.logIndex);
+        if (!Number.isInteger(rowIndex) || rowIndex < 0) {
+          return;
+        }
+        selectedLogIndex = rowIndex;
+        selectedLogText = logRow.textContent ?? undefined;
+      };
+
       // Default each newly opened context dialog to unwrapped and each details pane to Grafana's right anchor.
       const observer = new MutationObserver(updateNativeOverlays);
+      root.addEventListener('click', handleLogRowClick, true);
       observer.observe(ownerDocument.body, { childList: true, subtree: true });
       ownerDocument.defaultView?.addEventListener('resize', updateDetailsPane);
       updateNativeOverlays();
 
       return () => {
         observer.disconnect();
+        root.removeEventListener('click', handleLogRowClick, true);
         ownerDocument.defaultView?.removeEventListener('resize', updateDetailsPane);
         if (resetAnchorTimer !== undefined) {
           clearTimeout(resetAnchorTimer);
         }
+        removePodMonitorAction();
         restorePaneStyle();
       };
-    }, [panel]);
+    }, [model, panel]);
 
     useResizeObserver({
       onResize: () => {

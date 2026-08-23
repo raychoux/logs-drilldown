@@ -731,6 +731,9 @@
           "wrap": "Wrap"
         }
       },
+      "logs-list-scene": {
+        "monitor-pod": "Monitor pod"
+      },
       "logs-panel-error": {
         "clear-filters": "Clear filters",
         "default": "An error occurred"

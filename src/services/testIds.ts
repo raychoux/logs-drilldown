@@ -75,6 +75,7 @@ export const testIds = {
   },
   logDetails: {
     copyLink: 'data-testid log-details-copy-link',
+    monitorPod: 'data-testid log-details-monitor-pod',
     copyLogLine: 'data-testid log-details-copy-log-line',
     dialog: 'data-testid log-details-dialog',
     fields: 'data-testid log-details-fields',
