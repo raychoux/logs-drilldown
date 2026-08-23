@@ -214,6 +214,7 @@ test.describe('Table', () => {
     await expect(page.getByTestId(testIds.table.wrapper)).toBeVisible();
 
     await page.getByTestId(testIds.table.inspectLine).last().click();
-    await expect(page.getByRole('dialog', { name: 'Inspect value' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Log details' })).toBeVisible();
+    await expect(page.getByTestId(testIds.logDetails.logLine)).toBeVisible();
   });
 });

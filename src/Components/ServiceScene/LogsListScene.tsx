@@ -74,6 +74,13 @@ export interface LogsListSceneState extends SceneObjectState {
   visualizationType: LogsVisualizationType;
 }
 
+const nativeLogDetailsAnchorSelector = 'button[aria-label="Anchor to the right"]';
+const nativeLogDetailsSelector =
+  'section > div[class$="panel-content"] div:has(> div > div > [data-testid="input-wrapper"]):has(button)';
+const nativeLogDetailsTopOffset = 72;
+const nativeLogDetailsBottomOffset = 8;
+const nativeLogDetailsInlineWidth = '50%';
+
 export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
   panelHeight: undefined | string = undefined;
   protected _urlSync = new SceneObjectUrlSyncConfig(this, {
@@ -162,6 +169,129 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       model.setPanelWrapperEl(wrapperRef.current);
       return () => model.setPanelWrapperEl(null);
     }, [model, panel]);
+
+    useEffect(() => {
+      const root = wrapperRef.current;
+      if (!root) {
+        return;
+      }
+
+      const ownerDocument = root.ownerDocument;
+      let anchoredCurrentPane = false;
+      let resetAnchorTimer: ReturnType<typeof setTimeout> | undefined;
+      let styledPane: HTMLElement | undefined;
+      let originalPaneStyle: string | null = null;
+
+      const applyOriginalPaneStyle = () => {
+        if (!styledPane) {
+          return;
+        }
+        if (originalPaneStyle === null) {
+          styledPane.removeAttribute('style');
+        } else {
+          styledPane.setAttribute('style', originalPaneStyle);
+        }
+      };
+
+      const restorePaneStyle = () => {
+        applyOriginalPaneStyle();
+        styledPane = undefined;
+        originalPaneStyle = null;
+      };
+
+      const preparePaneStyle = (pane: HTMLElement) => {
+        if (styledPane !== pane) {
+          restorePaneStyle();
+          styledPane = pane;
+          originalPaneStyle = pane.getAttribute('style');
+        }
+        applyOriginalPaneStyle();
+      };
+
+      const sizeAnchoredPane = (pane: HTMLElement) => {
+        const slot = pane.parentElement;
+        if (!slot) {
+          return;
+        }
+
+        preparePaneStyle(pane);
+        const slotBounds = slot.getBoundingClientRect();
+        Object.assign(pane.style, {
+          bottom: `${nativeLogDetailsBottomOffset}px`,
+          height: 'auto',
+          left: `${slotBounds.left}px`,
+          marginLeft: '0',
+          maxHeight: 'none',
+          maxWidth: 'none',
+          minWidth: '0',
+          position: 'fixed',
+          right: 'auto',
+          top: `${nativeLogDetailsTopOffset}px`,
+          width: `${slotBounds.width}px`,
+          zIndex: '2',
+        });
+      };
+
+      const sizeInlinePane = (pane: HTMLElement) => {
+        preparePaneStyle(pane);
+        Object.assign(pane.style, {
+          marginLeft: 'auto',
+          maxWidth: nativeLogDetailsInlineWidth,
+          minWidth: nativeLogDetailsInlineWidth,
+          width: nativeLogDetailsInlineWidth,
+        });
+      };
+
+      const updateDetailsPane = () => {
+        const pane = ownerDocument.querySelector<HTMLElement>(nativeLogDetailsSelector);
+        if (!pane) {
+          restorePaneStyle();
+          if (resetAnchorTimer === undefined) {
+            resetAnchorTimer = setTimeout(() => {
+              anchoredCurrentPane = false;
+              resetAnchorTimer = undefined;
+            }, 50);
+          }
+          return;
+        }
+
+        if (resetAnchorTimer !== undefined) {
+          clearTimeout(resetAnchorTimer);
+          resetAnchorTimer = undefined;
+        }
+
+        const anchorButton = pane.querySelector<HTMLButtonElement>(nativeLogDetailsAnchorSelector);
+        if (!anchoredCurrentPane && anchorButton) {
+          anchoredCurrentPane = true;
+          anchorButton.click();
+          requestAnimationFrame(updateDetailsPane);
+          return;
+        }
+
+        if (anchoredCurrentPane && !anchorButton) {
+          sizeAnchoredPane(pane);
+        } else if (anchorButton) {
+          sizeInlinePane(pane);
+        } else {
+          restorePaneStyle();
+        }
+      };
+
+      // Default each newly opened pane to Grafana's right anchor, then extend only that pane vertically.
+      const observer = new MutationObserver(updateDetailsPane);
+      observer.observe(ownerDocument.body, { childList: true, subtree: true });
+      ownerDocument.defaultView?.addEventListener('resize', updateDetailsPane);
+      updateDetailsPane();
+
+      return () => {
+        observer.disconnect();
+        ownerDocument.defaultView?.removeEventListener('resize', updateDetailsPane);
+        if (resetAnchorTimer !== undefined) {
+          clearTimeout(resetAnchorTimer);
+        }
+        restorePaneStyle();
+      };
+    }, [panel]);
 
     useResizeObserver({
       onResize: () => {

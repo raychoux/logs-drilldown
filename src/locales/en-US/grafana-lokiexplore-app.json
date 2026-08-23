@@ -631,6 +631,22 @@
         "max-lines-placeholder": "{{logs}} logs",
         "max-lines-tooltip": "Number of log lines to request. Depends on the Loki configuration value for max_entries_limit."
       },
+      "log-details": {
+        "copy-link": "Copy link to log line",
+        "copy-log-line": "Copy log line",
+        "empty-value": "—",
+        "log-line": "Log line",
+        "no-matches": "No matching fields",
+        "parsed-fields": "Parsed fields",
+        "search": "Search fields and values",
+        "search-placeholder": "Search fields and values",
+        "structured-metadata": "Structured metadata",
+        "title": "Log details"
+      },
+      "log-details-button": {
+        "aria-label": "Open log details",
+        "tooltip": "Open log details"
+      },
       "log-list-controls": {
         "collapse": "Collapse",
         "expand": "Expand",
@@ -721,7 +737,8 @@
       },
       "logs-panel-scene": {
         "label": {
-          "copy-link-to-log-line": "Copy link to log line"
+          "copy-link-to-log-line": "Copy link to log line",
+          "open-log-details": "Open log details"
         },
         "text-loading": "Loading..."
       },
@@ -818,8 +835,6 @@
       },
       "line-action-icons": {
         "aria-label-view-log-line": "View log line",
-        "copy-to-clipboard": "Copy to Clipboard",
-        "title-inspect-value": "Inspect value",
         "tooltip-copy-link-to-log-line": "Copy link to log line",
         "tooltip-view-log-line": "View log line"
       },

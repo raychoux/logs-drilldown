@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { FieldType, toDataFrame } from '@grafana/data';
 
 import { testIds } from '../../services/testIds';
-import { getPluginLogRow, LogDetailsDialog } from './LogDetailsDialog';
+import { getLogRowPermalink, getPluginLogRow, LogDetailsDialog } from './LogDetailsDialog';
 
 const frame = toDataFrame({
   fields: [
@@ -32,15 +32,30 @@ describe('LogDetailsDialog', () => {
     expect(screen.getByTestId(testIds.logDetails.fields)).not.toHaveTextContent('service');
   });
 
-  test('exposes the display-only Monitor action and close callback', () => {
+  test('provides native copy actions and closes on escape', () => {
     const onDismiss = jest.fn();
     const row = getPluginLogRow(frame, 0);
     if (!row) {
       throw new Error('expected a log row');
     }
     render(<LogDetailsDialog row={row} onDismiss={onDismiss} />);
-    expect(screen.getByTestId(testIds.logDetails.monitor)).toHaveAccessibleName('Monitor log line');
+    expect(screen.getByTestId(testIds.logDetails.copyLogLine)).toHaveAccessibleName('Copy log line');
+    expect(screen.getByTestId(testIds.logDetails.copyLink)).toHaveAccessibleName('Copy link to log line');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onDismiss).toHaveBeenCalled();
+  });
+
+  test('builds the permalink from the native row labels and timestamp', () => {
+    window.history.pushState({}, '', '/a/grafana-lokiexplore-app/explore/service/api/logs?from=now-5m&to=now');
+    const row = getPluginLogRow(frame, 0);
+    if (!row) {
+      throw new Error('expected a log row');
+    }
+
+    const url = new URL(getLogRowPermalink(row));
+
+    expect(url.searchParams.get('selectedLine')).toEqual(JSON.stringify({ id: '0', row: 0 }));
+    expect(url.searchParams.get('from')).toBeTruthy();
+    expect(url.searchParams.get('to')).toBeTruthy();
   });
 });

@@ -74,13 +74,14 @@ export const testIds = {
     radio: 'data-testid radio-button',
   },
   logDetails: {
+    copyLink: 'data-testid log-details-copy-link',
+    copyLogLine: 'data-testid log-details-copy-log-line',
     dialog: 'data-testid log-details-dialog',
+    fields: 'data-testid log-details-fields',
     logLine: 'data-testid log-details-log-line',
     metadata: 'data-testid log-details-metadata',
-    monitor: 'data-testid log-details-monitor',
+    open: 'data-testid log-details-open',
     search: 'data-testid log-details-search',
-    fields: 'data-testid log-details-fields',
-    row: 'data-testid log-details-row',
   },
   patterns: {
     buttonExcludedPattern: 'data-testid button-excluded-pattern',

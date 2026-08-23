@@ -4,11 +4,11 @@ import { css } from '@emotion/css';
 
 import { DataFrame, Field, GrafanaTheme2 } from '@grafana/data';
 import { t } from '@grafana/i18n';
-import { Button, IconButton, Input, Modal, useStyles2 } from '@grafana/ui';
+import { ClipboardButton, IconButton, Input, Modal, useStyles2 } from '@grafana/ui';
 
 import { getBodyName, getTimeName, parseLogsFrame } from '../../services/logsFrame';
 import { testIds } from '../../services/testIds';
-import { copyText, generateLogRowShortlink } from '../../services/text';
+import { copyText, generateLogRowShortlink, getPermalinkLogRowFromDataFrame } from '../../services/text';
 
 export interface PluginLogRow {
   body: string;
@@ -16,6 +16,7 @@ export interface PluginLogRow {
   fields: Array<{ name: string; value: string }>;
   index: number;
   metadata: Array<{ name: string; value: string }>;
+  rowId?: string;
   time: string;
 }
 
@@ -78,11 +79,21 @@ export function getPluginLogRow(dataFrame: DataFrame, index: number): PluginLogR
   return {
     dataFrame,
     index,
+    rowId: frame.idField ? getFieldValue(frame.idField, index) || undefined : undefined,
     body: getFieldValue(bodyField, index),
     time: getFieldValue(timeField, index),
     fields,
     metadata,
   };
+}
+
+export function getLogRowPermalink(row: PluginLogRow): string {
+  const permalinkRow = getPermalinkLogRowFromDataFrame(row.dataFrame, row.index);
+  if (!permalinkRow) {
+    return '';
+  }
+
+  return generateLogRowShortlink(permalinkRow, { id: row.rowId ?? String(row.index), row: row.index }, 'selectedLine');
 }
 
 export function LogDetailsDialog({ onDismiss, row }: Props) {
@@ -127,25 +138,24 @@ export function LogDetailsDialog({ onDismiss, row }: Props) {
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
           />
-          <Button
-            data-testid={testIds.logDetails.monitor}
-            aria-label={t('components.service-scene.monitor-button.aria-label', 'Monitor log line')}
-            variant="secondary"
-            icon="eye"
+          <ClipboardButton
+            aria-label={t('components.service-scene.log-details.copy-log-line', 'Copy log line')}
+            data-testid={testIds.logDetails.copyLogLine}
+            getText={() => row.body}
+            icon="copy"
           >
-            {t('components.service-scene.log-details.monitor', 'Monitor')}
-          </Button>
+            {t('components.service-scene.log-details.copy-log-line', 'Copy log line')}
+          </ClipboardButton>
           <IconButton
             aria-label={t('components.service-scene.log-details.copy-link', 'Copy link to log line')}
+            data-testid={testIds.logDetails.copyLink}
             tooltip={t('components.service-scene.log-details.copy-link', 'Copy link to log line')}
             name="share-alt"
             onClick={() => {
-              const permalink = generateLogRowShortlink(
-                { dataFrame: row.dataFrame, labels: {}, rowIndex: row.index, timeEpochMs: Number(row.time) },
-                { id: String(row.index), row: row.index },
-                'selectedLine'
-              );
-              copyText(permalink);
+              const permalink = getLogRowPermalink(row);
+              if (permalink) {
+                copyText(permalink);
+              }
             }}
           />
         </div>

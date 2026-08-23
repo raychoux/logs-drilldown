@@ -3,9 +3,10 @@ import React, { useCallback, useState } from 'react';
 import { css } from '@emotion/css';
 
 import { GrafanaTheme2 } from '@grafana/data';
-import { t, Trans } from '@grafana/i18n';
-import { ClipboardButton, IconButton, Modal, useTheme2 } from '@grafana/ui';
+import { t } from '@grafana/i18n';
+import { ClipboardButton, IconButton, useTheme2 } from '@grafana/ui';
 
+import { getPluginLogRow, LogDetailsDialog, PluginLogRow } from 'Components/ServiceScene/LogDetailsDialog';
 import { useQueryContext } from 'Components/Table/Context/QueryContext';
 import { testIds } from 'services/testIds';
 import { generateLogRowShortlink, getPermalinkLogRowFromDataFrame } from 'services/text';
@@ -53,8 +54,7 @@ export function LineActionIcons(props: { rowIndex: number; value: unknown }) {
   const styles = getStyles(theme, isNumber);
   const { logsFrame } = useQueryContext();
   const logId = logsFrame?.idField?.values[props.rowIndex];
-  const lineValue = logsFrame?.bodyField.values[props.rowIndex];
-  const [isInspecting, setIsInspecting] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<PluginLogRow>();
   const getText = useCallback(() => {
     if (!logsFrame) {
       return '';
@@ -66,6 +66,15 @@ export function LineActionIcons(props: { rowIndex: number; value: unknown }) {
     // The Table view scrolls to and highlights the line from the `selectedLine` url param.
     return generateLogRowShortlink(row, { id: logId, row: props.rowIndex }, 'selectedLine');
   }, [logsFrame, logId, props.rowIndex]);
+
+  const inspectRow = useCallback(() => {
+    if (!logsFrame) {
+      return;
+    }
+
+    setSelectedRow(getPluginLogRow(logsFrame.raw, props.rowIndex));
+  }, [logsFrame, props.rowIndex]);
+
   return (
     <>
       <div className={styles.iconWrapper}>
@@ -79,7 +88,7 @@ export function LineActionIcons(props: { rowIndex: number; value: unknown }) {
             tooltipPlacement="top"
             size="md"
             name="eye"
-            onClick={() => setIsInspecting(true)}
+            onClick={inspectRow}
             tabIndex={0}
           />
         </div>
@@ -97,22 +106,7 @@ export function LineActionIcons(props: { rowIndex: number; value: unknown }) {
           />
         </div>
       </div>
-      <>
-        {isInspecting && (
-          <Modal
-            onDismiss={() => setIsInspecting(false)}
-            isOpen={true}
-            title={t('components.table.line-action-icons.title-inspect-value', 'Inspect value')}
-          >
-            <pre>{lineValue}</pre>
-            <Modal.ButtonRow>
-              <ClipboardButton icon="copy" getText={() => lineValue}>
-                <Trans i18nKey="components.table.line-action-icons.copy-to-clipboard">Copy to Clipboard</Trans>
-              </ClipboardButton>
-            </Modal.ButtonRow>
-          </Modal>
-        )}
-      </>
+      {selectedRow && <LogDetailsDialog row={selectedRow} onDismiss={() => setSelectedRow(undefined)} />}
     </>
   );
 }
