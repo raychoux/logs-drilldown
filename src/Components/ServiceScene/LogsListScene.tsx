@@ -1,11 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { css } from '@emotion/css';
 import { useResizeObserver } from '@react-aria/utils';
-import { createRoot, Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 
 import { DataFrame, LoadingState, PanelData, shallowCompare } from '@grafana/data';
-import { t } from '@grafana/i18n';
 import { config, locationService, useChromeHeaderHeight } from '@grafana/runtime';
 import {
   AdHocFiltersVariable,
@@ -20,7 +19,6 @@ import {
   SceneTimeRangeLike,
 } from '@grafana/scenes';
 import { Options } from '@grafana/schema/dist/esm/raw/composable/logs/panelcfg/x/LogsPanelCfg_types.gen';
-import { Button } from '@grafana/ui';
 
 import { ActionBarScene } from './ActionBarScene';
 import { JSONLogsScene } from './JSONLogsScene';
@@ -29,6 +27,7 @@ import { LogsPanelScene } from './LogsPanelScene';
 import { LogsTablePanelScene } from './LogsTablePanelScene';
 import { LogsTableScene } from './LogsTableScene';
 import { LogsVolumePanel, logsVolumePanelKey } from './LogsVolume/LogsVolumePanel';
+import { PodMonitorAction } from './PodMonitorAction';
 import { ServiceScene } from './ServiceScene';
 import { IndexScene } from 'Components/IndexScene/IndexScene';
 import { DEFAULT_URL_COLUMNS, DEFAULT_URL_COLUMNS_LEVELS } from 'Components/Table/constants';
@@ -54,7 +53,6 @@ import {
   setDisplayedFieldsInStorage,
   setLogsVisualizationType,
 } from 'services/store';
-import { testIds } from 'services/testIds';
 import { getLabelsVariable } from 'services/variableGetters';
 import { getVariablesThatCanBeCleared } from 'services/variableHelpers';
 
@@ -89,16 +87,26 @@ const nativeLogDetailsInlineWidth = '50%';
 const nativeLogContextDialogSelector = '[role="dialog"]:has([data-testid="revert-button"])';
 const nativeLogContextWrapSelector = 'input[role="switch"]';
 const nativeLogDetailsCloseSelector = 'button[aria-label^="Close log details"]';
-const podDashboardPath = '/d/k8s_views_pods/kubernetes-views-pods';
+const podDashboardPath = '/d/grafana-lokiexplore-pod-monitor/pod-monitor';
 
 export interface PodMonitorTarget {
   dashboardUrl: string;
+  datasourceUid: string;
+  from: string;
+  logQuery: string;
   pod: string;
+  to: string;
 }
 
 interface DataFrameRow {
   dataFrame: DataFrame;
   index: number;
+}
+
+interface TypedRowValue {
+  key: string;
+  type: LabelType;
+  value: string;
 }
 
 function normalizeLogText(value: string): string {
@@ -135,7 +143,7 @@ function getCandidateRows(dataFrames: DataFrame[], rowIndex: number, rowText?: s
   return textMatches.length > 0 ? textMatches : indexedRows;
 }
 
-function getTypedRowValue(row: DataFrameRow, keyMatcher: (key: string) => boolean): string | undefined {
+function getTypedRowValue(row: DataFrameRow, keyMatcher: (key: string) => boolean): TypedRowValue | undefined {
   const labels = parseLogsFrame(row.dataFrame)?.getLogFrameLabelsAsLabels()?.[row.index] ?? {};
   for (const [key, value] of Object.entries(labels)) {
     const type = getLabelTypeFromFrame(key, row.dataFrame, row.index);
@@ -145,10 +153,31 @@ function getTypedRowValue(row: DataFrameRow, keyMatcher: (key: string) => boolea
       value != null &&
       String(value).trim()
     ) {
-      return String(value);
+      return { key, type, value: String(value) };
     }
   }
   return undefined;
+}
+
+function toLogQLIdentifier(key: string): string {
+  return key.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+function getPodLogQuery(row: DataFrameRow, pod: TypedRowValue): string {
+  const podMatcher = `${toLogQLIdentifier(pod.key)}=${JSON.stringify(pod.value)}`;
+  if (pod.type === LabelType.Indexed) {
+    return `{${podMatcher}}`;
+  }
+
+  const preferredStreamLabels = ['service_name', 'service', 'cluster', 'namespace', 'env'];
+  for (const preferredKey of preferredStreamLabels) {
+    const streamLabel = getTypedRowValue(row, (key) => key === preferredKey);
+    if (streamLabel?.type === LabelType.Indexed) {
+      return `{${toLogQLIdentifier(streamLabel.key)}=${JSON.stringify(streamLabel.value)}} | ${podMatcher}`;
+    }
+  }
+
+  return `{service_name=~".+"} | ${podMatcher}`;
 }
 
 export function getPodMonitorTarget(
@@ -166,6 +195,7 @@ export function getPodMonitorTarget(
 
     const namespace = getTypedRowValue(row, (key) => key.includes('namespace'));
     const cluster = getTypedRowValue(row, (key) => key.includes('cluster'));
+    const service = getTypedRowValue(row, (key) => key === 'service_name' || key === 'service');
     const sourceParams = new URLSearchParams(currentSearch);
     const dashboardParams = new URLSearchParams();
     for (const key of ['from', 'to', 'timezone']) {
@@ -174,17 +204,31 @@ export function getPodMonitorTarget(
         dashboardParams.set(key, value);
       }
     }
-    dashboardParams.set('var-pod', pod);
+    dashboardParams.set('var-pod', pod.value);
+    const logQuery = getPodLogQuery(row, pod);
+    dashboardParams.set('var-pod_query', logQuery);
     if (namespace) {
-      dashboardParams.set('var-namespace', namespace);
+      dashboardParams.set('var-namespace', namespace.value);
     }
     if (cluster) {
-      dashboardParams.set('var-cluster', cluster);
+      dashboardParams.set('var-cluster', cluster.value);
+    }
+    if (service) {
+      dashboardParams.set('var-service', service.value);
+    }
+
+    const datasourceUid = sourceParams.get('var-ds') ?? '';
+    if (datasourceUid) {
+      dashboardParams.set('var-ds', datasourceUid);
     }
 
     return {
       dashboardUrl: `${appSubUrl}${podDashboardPath}?${dashboardParams.toString()}`,
-      pod,
+      datasourceUid,
+      from: sourceParams.get('from') ?? 'now-15m',
+      logQuery,
+      pod: pod.value,
+      to: sourceParams.get('to') ?? 'now',
     };
   }
   return undefined;
@@ -288,6 +332,10 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
   public static Component = ({ model }: SceneComponentProps<LogsListScene>) => {
     const { panel } = model.useState();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const [podMonitorPortal, setPodMonitorPortal] = useState<{
+      container: HTMLSpanElement;
+      target: PodMonitorTarget;
+    }>();
     const height = useChromeHeaderHeight();
 
     useEffect(() => {
@@ -318,13 +366,11 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       let selectedLogIndex: number | undefined;
       let selectedLogText: string | undefined;
       let podMonitorContainer: HTMLSpanElement | undefined;
-      let podMonitorRoot: Root | undefined;
       let renderedPodMonitorUrl: string | undefined;
 
       const removePodMonitorAction = () => {
-        podMonitorRoot?.unmount();
+        setPodMonitorPortal(undefined);
         podMonitorContainer?.remove();
-        podMonitorRoot = undefined;
         podMonitorContainer = undefined;
         renderedPodMonitorUrl = undefined;
       };
@@ -412,26 +458,13 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
           removePodMonitorAction();
           podMonitorContainer = ownerDocument.createElement('span');
           toolbar.insertBefore(podMonitorContainer, buttonGroup);
-          podMonitorRoot = createRoot(podMonitorContainer);
         }
         if (renderedPodMonitorUrl === target.dashboardUrl) {
           return;
         }
 
         renderedPodMonitorUrl = target.dashboardUrl;
-        podMonitorRoot?.render(
-          <Button
-            data-dashboard-url={target.dashboardUrl}
-            data-pod={target.pod}
-            data-testid={testIds.logDetails.monitorPod}
-            icon="apps"
-            onClick={() => locationService.push(target.dashboardUrl)}
-            size="sm"
-            variant="secondary"
-          >
-            {t('components.service-scene.logs-list-scene.monitor-pod', 'Monitor pod')}
-          </Button>
-        );
+        setPodMonitorPortal({ container: podMonitorContainer, target });
       };
 
       const updateDetailsPane = () => {
@@ -527,9 +560,17 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
     }
 
     return (
-      <div className={styles.panelWrapper} ref={wrapperRef}>
-        <panel.Component model={panel} />
-      </div>
+      <>
+        <div className={styles.panelWrapper} ref={wrapperRef}>
+          <panel.Component model={panel} />
+        </div>
+        {podMonitorPortal
+          ? createPortal(
+              <PodMonitorAction dashboardUrl={podMonitorPortal.target.dashboardUrl} target={podMonitorPortal.target} />,
+              podMonitorPortal.container
+            )
+          : null}
+      </>
     );
   };
 

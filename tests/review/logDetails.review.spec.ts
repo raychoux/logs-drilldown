@@ -114,9 +114,29 @@ test('shows a pod monitor dashboard action for pod metadata', async ({ page }, t
   await expect(monitorPod).toHaveAttribute('data-pod', /tempo-ingester-/);
   await expect(monitorPod).toHaveAttribute(
     'data-dashboard-url',
-    /\/d\/k8s_views_pods\/kubernetes-views-pods\?.*var-pod=tempo-ingester-/
+    /\/d\/grafana-lokiexplore-pod-monitor\/pod-monitor\?.*var-pod=tempo-ingester-/
   );
-  await capture(page, testInfo, 'log-details-pod-monitor');
+
+  const logsUrl = page.url();
+  await monitorPod.click();
+
+  const monitorDialog = page.getByTestId(testIds.logDetails.monitorPodDialog);
+  const monitorDashboard = page.getByTestId(testIds.logDetails.monitorPodDashboard);
+  await expect(monitorDialog).toBeVisible();
+  await expect(monitorDashboard).toBeVisible();
+  await expect(monitorDashboard.locator('iframe')).toHaveCount(0);
+  await expect(monitorDashboard).toHaveAttribute('data-dashboard-renderer', 'grafana-embedded-dashboard');
+  await expect(monitorDashboard.getByRole('button', { name: /^Time range selected:/ })).toBeVisible();
+  await expect(monitorDashboard.getByText('Log volume', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Error logs', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Recent logs', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText(/level=/).first()).toBeVisible({ timeout: 45_000 });
+  await expect(page).toHaveURL(logsUrl);
+  await capture(page, testInfo, 'log-details-pod-monitor-popup');
+
+  await monitorDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(monitorDialog).toBeHidden();
+  await expect(page).toHaveURL(logsUrl);
 });
 
 test('captures Show Context with wrapping disabled by default', async ({ page }, testInfo) => {

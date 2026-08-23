@@ -72,15 +72,24 @@ describe('getPodMonitorTarget', () => {
     const target = getPodMonitorTarget(
       [frame],
       0,
-      '?from=now-30m&to=now&timezone=browser',
+      '?from=now-30m&to=now&timezone=browser&var-ds=prod-loki',
       '12:00 selected log body',
       '/grafana'
     );
 
     expect(target?.pod).toBe('tempo-ingester-abc123');
+    expect(target?.datasourceUid).toBe('prod-loki');
+    expect(target?.from).toBe('now-30m');
+    expect(target?.to).toBe('now');
+    expect(target?.logQuery).toBe(
+      podType === 'I' ? '{pod="tempo-ingester-abc123"}' : '{cluster="prod-us"} | pod="tempo-ingester-abc123"'
+    );
     const url = new URL(target?.dashboardUrl ?? '', 'http://localhost');
-    expect(url.pathname).toBe('/grafana/d/k8s_views_pods/kubernetes-views-pods');
+    expect(url.pathname).toBe('/grafana/d/grafana-lokiexplore-pod-monitor/pod-monitor');
     expect(url.searchParams.get('var-pod')).toBe('tempo-ingester-abc123');
+    expect(url.searchParams.get('var-pod_query')).toBe(
+      podType === 'I' ? '{pod="tempo-ingester-abc123"}' : '{cluster="prod-us"} | pod="tempo-ingester-abc123"'
+    );
     expect(url.searchParams.get('var-namespace')).toBe('observability');
     expect(url.searchParams.get('var-cluster')).toBe('prod-us');
     expect(url.searchParams.get('from')).toBe('now-30m');

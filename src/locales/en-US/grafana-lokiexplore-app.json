@@ -731,9 +731,6 @@
           "wrap": "Wrap"
         }
       },
-      "logs-list-scene": {
-        "monitor-pod": "Monitor pod"
-      },
       "logs-panel-error": {
         "clear-filters": "Clear filters",
         "default": "An error occurred"
@@ -744,6 +741,13 @@
           "open-log-details": "Open log details"
         },
         "text-loading": "Loading..."
+      },
+      "pod-monitor-action": {
+        "close": "Close",
+        "loading": "Loading pod dashboard...",
+        "open": "Monitor pod",
+        "open-full": "Open full dashboard",
+        "title": "Pod monitoring: {{pod}}"
       },
       "text-loading": "Loading..."
     },
