@@ -80,6 +80,28 @@ const nativeLogDetailsSelector =
 const nativeLogDetailsTopOffset = 72;
 const nativeLogDetailsBottomOffset = 8;
 const nativeLogDetailsInlineWidth = '50%';
+const nativeLogContextDialogSelector = '[role="dialog"]:has([data-testid="revert-button"])';
+const nativeLogContextWrapSelector = 'input[role="switch"]';
+
+export function initializeNativeLogContextWrap(
+  root: ParentNode,
+  initializedDialog?: HTMLElement
+): HTMLElement | undefined {
+  const dialog = root.querySelector<HTMLElement>(nativeLogContextDialogSelector) ?? undefined;
+  if (!dialog || dialog === initializedDialog) {
+    return dialog;
+  }
+
+  const wrapToggle = dialog.querySelector<HTMLInputElement>(nativeLogContextWrapSelector);
+  if (!wrapToggle) {
+    return initializedDialog;
+  }
+
+  if (wrapToggle.checked) {
+    wrapToggle.click();
+  }
+  return dialog;
+}
 
 export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
   panelHeight: undefined | string = undefined;
@@ -178,6 +200,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
 
       const ownerDocument = root.ownerDocument;
       let anchoredCurrentPane = false;
+      let initializedLogContextDialog: HTMLElement | undefined;
       let resetAnchorTimer: ReturnType<typeof setTimeout> | undefined;
       let styledPane: HTMLElement | undefined;
       let originalPaneStyle: string | null = null;
@@ -277,11 +300,16 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         }
       };
 
-      // Default each newly opened pane to Grafana's right anchor, then extend only that pane vertically.
-      const observer = new MutationObserver(updateDetailsPane);
+      const updateNativeOverlays = () => {
+        initializedLogContextDialog = initializeNativeLogContextWrap(ownerDocument, initializedLogContextDialog);
+        updateDetailsPane();
+      };
+
+      // Default each newly opened context dialog to unwrapped and each details pane to Grafana's right anchor.
+      const observer = new MutationObserver(updateNativeOverlays);
       observer.observe(ownerDocument.body, { childList: true, subtree: true });
       ownerDocument.defaultView?.addEventListener('resize', updateDetailsPane);
-      updateDetailsPane();
+      updateNativeOverlays();
 
       return () => {
         observer.disconnect();

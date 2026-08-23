@@ -93,3 +93,36 @@ test('captures the custom dialog from native Logs and Table renderers', async ({
   await expect(page.getByRole('dialog', { name: 'Log details' })).toBeVisible();
   await capture(page, testInfo, 'log-details-native-table');
 });
+
+test('captures Show Context with wrapping disabled by default', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await mkdir(artifactDir, { recursive: true });
+
+  const explorePage = new ExplorePage(page, testInfo);
+  await page.setViewportSize({ height: 1000, width: 1440 });
+  await explorePage.clearLocalStorage();
+  await explorePage.gotoServicesBreakdownOldUrl('tempo-distributor', reviewFrom, reviewTo);
+  await explorePage.assertNotLoading();
+
+  const logMenus = page.getByLabel('Log menu');
+  await expect(logMenus.first()).toBeAttached({ timeout: 45_000 });
+  await explorePage.setLogsLineWrapMenu(true);
+
+  await logMenus.first().click({ force: true });
+  await page.getByText('Show context', { exact: true }).click();
+  let contextDialog = page.getByRole('dialog', { name: 'Log context' });
+  let contextWrap = contextDialog.getByRole('switch', { name: 'Wrap lines' });
+  await expect(contextWrap).not.toBeChecked();
+
+  await contextWrap.check();
+  await expect(contextWrap).toBeChecked();
+  await contextDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(contextDialog).toBeHidden();
+
+  await logMenus.nth(1).click({ force: true });
+  await page.getByText('Show context', { exact: true }).click();
+  contextDialog = page.getByRole('dialog', { name: 'Log context' });
+  contextWrap = contextDialog.getByRole('switch', { name: 'Wrap lines' });
+  await expect(contextWrap).not.toBeChecked();
+  await capture(page, testInfo, 'log-context-wrap-default-off');
+});
