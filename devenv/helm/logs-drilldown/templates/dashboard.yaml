@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-dashboard
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+data:
+  pod-monitor.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${metrics_ds}"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2}, "unit": "cores"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[2m]))", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "title": "Pod CPU usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${metrics_ds}"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2}, "unit": "bytes"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "sum by (pod) (container_memory_working_set_bytes{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"})", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "title": "Pod memory working set",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${metrics_ds}"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2}, "min": 0, "max": 100, "unit": "percent"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+          "id": 3,
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "100 * (sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[2m])) / clamp_min(sum by (pod) (rate(container_cpu_cfs_periods_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[2m])), 0.001))", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "title": "Pod CPU throttling",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "${ds}"},
+          "gridPos": {"h": 11, "w": 24, "x": 0, "y": 16},
+          "id": 4,
+          "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+          "targets": [{"expr": "${pod_query:raw}", "queryType": "range", "refId": "A"}],
+          "title": "Recent pod logs",
+          "type": "logs"
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 41,
+      "tags": ["logs-drilldown", "kubernetes", "local-dev"],
+      "templating": {
+        "list": [
+          {"current": {"text": "gdev-prometheus", "value": "gdev-prometheus"}, "hide": 2, "label": "Metrics datasource", "name": "metrics_ds", "options": [], "query": "prometheus", "refresh": 1, "type": "datasource"},
+          {"current": {"text": "gdev-loki", "value": "gdev-loki"}, "hide": 2, "label": "Logs datasource", "name": "ds", "options": [], "query": "loki", "refresh": 1, "type": "datasource"},
+          {"current": {"text": "{{ .Release.Namespace }}", "value": "{{ .Release.Namespace }}"}, "hide": 2, "label": "Namespace", "name": "namespace", "query": "{{ .Release.Namespace }}", "skipUrlSync": false, "type": "textbox"},
+          {"current": {"text": "{{ include "logs-drilldown.fullname" . }}-demo.*", "value": "{{ include "logs-drilldown.fullname" . }}-demo.*"}, "hide": 2, "label": "Pod", "name": "pod", "query": "{{ include "logs-drilldown.fullname" . }}-demo.*", "skipUrlSync": false, "type": "textbox"},
+          {"current": {"text": "{{ .Values.clusterName }}", "value": "{{ .Values.clusterName }}"}, "hide": 2, "label": "Cluster", "name": "cluster", "query": "{{ .Values.clusterName }}", "skipUrlSync": false, "type": "custom"},
+          {"current": {"text": "{namespace=\"{{ .Release.Namespace }}\",service_name=\"pod-monitor-demo\"}", "value": "{namespace=\"{{ .Release.Namespace }}\",service_name=\"pod-monitor-demo\"}"}, "hide": 2, "label": "Pod log query", "name": "pod_query", "query": "{namespace=\"{{ .Release.Namespace }}\",service_name=\"pod-monitor-demo\"}", "skipUrlSync": false, "type": "textbox"}
+        ]
+      },
+      "time": {"from": "now-15m", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Pod Monitor",
+      "uid": "{{ .Values.grafana.dashboardUid }}",
+      "version": 1,
+      "weekStart": ""
+    }

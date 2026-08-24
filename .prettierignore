@@ -26,3 +26,5 @@ docker-compose.local.yaml
 generator/
 tests/static-loki/
 .yarnrc
+devenv/helm/logs-drilldown/templates/
+devenv/helm/logs-drilldown/images/grafana/Dockerfile

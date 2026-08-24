@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-demo
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo
+spec:
+  replicas: {{ .Values.demo.replicas }}
+  selector:
+    matchLabels:
+      {{- include "logs-drilldown.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: demo
+  template:
+    metadata:
+      labels:
+        {{- include "logs-drilldown.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: demo
+        app.kubernetes.io/part-of: logs-drilldown
+    spec:
+      containers:
+        - name: app
+          image: "{{ .Values.demo.image.repository }}:{{ .Values.demo.image.tag }}"
+          imagePullPolicy: {{ .Values.demo.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.demo.resources | nindent 12 }}
+        - name: log-emitter
+          image: "{{ .Values.demo.image.repository }}:{{ .Values.demo.image.tag }}"
+          imagePullPolicy: {{ .Values.demo.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              sequence=0
+              while true; do
+                sequence=$((sequence + 1))
+                timestamp="$(date +%s)000000000"
+                line="level=info service=pod-monitor-demo pod=${POD_NAME} namespace=${POD_NAMESPACE} sequence=${sequence} message=real-kubernetes-pod-log"
+                payload="$(printf '{"streams":[{"stream":{"cluster":"%s","namespace":"%s","pod":"%s","container":"app","service_name":"pod-monitor-demo"},"values":[["%s","%s"]]}]}' "${CLUSTER_NAME}" "${POD_NAMESPACE}" "${POD_NAME}" "${timestamp}" "${line}")"
+                wget -qO- --header='Content-Type: application/json' --header="X-Scope-OrgID: ${LOKI_TENANT_ID}" --post-data="${payload}" "${LOKI_URL}/loki/api/v1/push" >/dev/null || true
+                sleep {{ .Values.demo.logIntervalSeconds }}
+              done
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CLUSTER_NAME
+              value: {{ .Values.clusterName | quote }}
+            - name: LOKI_URL
+              value: http://{{ include "logs-drilldown.fullname" . }}-loki:3100
+            - name: LOKI_TENANT_ID
+              value: {{ .Values.loki.tenantId | quote }}
+          resources:
+            {{- toYaml .Values.demo.resources | nindent 12 }}

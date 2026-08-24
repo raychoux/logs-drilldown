@@ -1,0 +1,6 @@
+apiVersion: v2
+name: logs-drilldown-dev
+description: Complete Docker Desktop Kubernetes development stack for Grafana Logs Drilldown
+type: application
+version: 0.2.0
+appVersion: '2.5.1'

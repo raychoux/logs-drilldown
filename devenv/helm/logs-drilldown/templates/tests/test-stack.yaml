@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-test
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: verify
+      image: "{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          wait_for() {
+            name="$1"
+            url="$2"
+            attempt=0
+            until [ "${attempt}" -ge 60 ]; do
+              attempt=$((attempt + 1))
+              if curl -fsS "${url}" >/dev/null; then
+                echo "Verified ${name}"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "${name} is not ready at ${url}" >&2
+            return 1
+          }
+
+          wait_for Grafana http://{{ include "logs-drilldown.fullname" . }}-grafana:3001/api/health
+          wait_for Loki http://{{ include "logs-drilldown.fullname" . }}-loki:3100/ready
+          wait_for Tempo http://{{ include "logs-drilldown.fullname" . }}-tempo:3200/ready
+          wait_for Prometheus http://{{ include "logs-drilldown.fullname" . }}-prometheus:9090/-/ready
+          wait_for Alloy http://{{ include "logs-drilldown.fullname" . }}-alloy:12345/-/ready
+
+          attempt=0
+          until [ "${attempt}" -ge 40 ]; do
+            attempt=$((attempt + 1))
+            metrics="$(curl -fsS -G --data-urlencode 'query=count(container_cpu_usage_seconds_total{namespace="{{ .Release.Namespace }}",pod=~"{{ include "logs-drilldown.fullname" . }}-demo-.*"})' 'http://{{ include "logs-drilldown.fullname" . }}-prometheus:9090/api/v1/query' || true)"
+            if echo "${metrics}" | grep -q '"result":\[{' ; then
+              echo "Verified real cAdvisor pod metrics"
+              break
+            fi
+            if [ "${attempt}" -eq 40 ]; then
+              echo "No real pod metrics were found" >&2
+              exit 1
+            fi
+            sleep 3
+          done
+
+          attempt=0
+          until [ "${attempt}" -ge 40 ]; do
+            attempt=$((attempt + 1))
+            logs="$(curl -fsS -G -H 'X-Scope-OrgID: {{ .Values.loki.tenantId }}' --data-urlencode 'query={namespace="{{ .Release.Namespace }}",pod=~"{{ include "logs-drilldown.fullname" . }}-demo-.*"}' --data-urlencode 'limit=1' 'http://{{ include "logs-drilldown.fullname" . }}-loki:3100/loki/api/v1/query_range' || true)"
+            if echo "${logs}" | grep -q '"result":\[{' ; then
+              echo "Verified real pod-labelled Loki logs"
+              break
+            fi
+            if [ "${attempt}" -eq 40 ]; then
+              echo "No pod-labelled logs were found" >&2
+              exit 1
+            fi
+            sleep 3
+          done
+
+          curl -fsS 'http://{{ include "logs-drilldown.fullname" . }}-grafana:3001/api/plugins/grafana-lokiexplore-app/settings' | grep -q 'grafana-lokiexplore-app'
+          echo "Verified Logs Drilldown plugin registration"
+          curl -fsS 'http://{{ include "logs-drilldown.fullname" . }}-grafana:3001/api/dashboards/uid/{{ .Values.grafana.dashboardUid }}' | grep -q '"uid":"{{ .Values.grafana.dashboardUid }}"'
+          echo "Verified Grafana pod monitor dashboard"

@@ -125,11 +125,16 @@ test('shows a pod monitor dashboard action for pod metadata', async ({ page }, t
   await expect(monitorDialog).toBeVisible();
   await expect(monitorDashboard).toBeVisible();
   await expect(monitorDashboard.locator('iframe')).toHaveCount(0);
-  await expect(monitorDashboard).toHaveAttribute('data-dashboard-renderer', 'grafana-embedded-dashboard');
+  await expect(monitorDashboard).toHaveAttribute('data-dashboard-renderer', 'grafana-embedded-dashboard-url');
+  await expect(monitorDashboard).toHaveAttribute(
+    'data-dashboard-url',
+    /\/d\/grafana-lokiexplore-pod-monitor\/pod-monitor\?.*var-pod=tempo-ingester-/
+  );
   await expect(monitorDashboard.getByRole('button', { name: /^Time range selected:/ })).toBeVisible();
-  await expect(monitorDashboard.getByText('Log volume', { exact: true })).toBeVisible();
-  await expect(monitorDashboard.getByText('Error logs', { exact: true })).toBeVisible();
-  await expect(monitorDashboard.getByText('Recent logs', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Pod CPU usage', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Pod memory working set', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Pod CPU throttling', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Recent pod logs', { exact: true })).toBeVisible();
   await expect(monitorDashboard.getByText(/level=/).first()).toBeVisible({ timeout: 45_000 });
   await expect(page).toHaveURL(logsUrl);
   await capture(page, testInfo, 'log-details-pod-monitor-popup');
@@ -137,6 +142,38 @@ test('shows a pod monitor dashboard action for pod metadata', async ({ page }, t
   await monitorDialog.getByRole('button', { name: 'Close' }).click();
   await expect(monitorDialog).toBeHidden();
   await expect(page).toHaveURL(logsUrl);
+});
+
+test('renders real Kubernetes pod metrics and logs in the pod monitor dashboard', async ({ page }, testInfo) => {
+  test.skip(process.env.UI_REVIEW_REAL_POD !== '1', 'Run make start and set UI_REVIEW_REAL_POD=1.');
+  test.setTimeout(180_000);
+  await mkdir(artifactDir, { recursive: true });
+
+  const explorePage = new ExplorePage(page, testInfo);
+  await page.setViewportSize({ height: 1000, width: 1440 });
+  await explorePage.clearLocalStorage();
+  await explorePage.gotoServicesBreakdownOldUrl('pod-monitor-demo', 'now-15m', 'now');
+  await explorePage.assertNotLoading();
+
+  const nativeLogRow = page.locator('.unwrapped-log-line').first();
+  await expect(nativeLogRow).toBeVisible({ timeout: 45_000 });
+  await nativeLogRow.click();
+
+  const monitorPod = page.getByTestId(testIds.logDetails.monitorPod);
+  await expect(monitorPod).toBeVisible();
+  await expect(monitorPod).toHaveAttribute('data-pod', /logs-drilldown-dev-demo-/);
+  await monitorPod.click();
+
+  const monitorDialog = page.getByTestId(testIds.logDetails.monitorPodDialog);
+  const monitorDashboard = page.getByTestId(testIds.logDetails.monitorPodDashboard);
+  await expect(monitorDialog).toBeVisible();
+  await expect(monitorDashboard.getByText('Pod CPU usage', { exact: true })).toBeVisible({ timeout: 45_000 });
+  await expect(monitorDashboard.getByText('Pod memory working set', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Pod CPU throttling', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText('Recent pod logs', { exact: true })).toBeVisible();
+  await expect(monitorDashboard.getByText(/real-kubernetes-pod-log/).first()).toBeVisible({ timeout: 45_000 });
+  await expect(monitorDashboard.getByText('No data')).toHaveCount(0, { timeout: 45_000 });
+  await capture(page, testInfo, 'pod-monitor-real-kubernetes');
 });
 
 test('captures Show Context with wrapping disabled by default', async ({ page }, testInfo) => {

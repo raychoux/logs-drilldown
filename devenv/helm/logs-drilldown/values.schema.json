@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["clusterName", "grafana", "loki", "tempo", "prometheus", "alloy", "generator", "demo", "tests"],
+  "properties": {
+    "clusterName": { "type": "string", "minLength": 1 },
+    "grafana": {
+      "type": "object",
+      "required": ["image", "rootUrl", "dashboardUid", "dashboardSlug", "resources"],
+      "properties": {
+        "rootUrl": { "type": "string", "pattern": "^https?://" },
+        "dashboardUid": { "type": "string", "minLength": 1 },
+        "dashboardSlug": { "type": "string", "minLength": 1 }
+      }
+    },
+    "loki": {
+      "type": "object",
+      "required": ["image", "tenantId", "resources"],
+      "properties": { "tenantId": { "type": "string", "minLength": 1 } }
+    },
+    "prometheus": {
+      "type": "object",
+      "required": ["image", "retention", "resources"],
+      "properties": { "retention": { "type": "string", "minLength": 1 } }
+    },
+    "demo": {
+      "type": "object",
+      "required": ["replicas", "image", "logIntervalSeconds", "resources"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1 },
+        "logIntervalSeconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

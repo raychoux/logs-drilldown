@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-config
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+data:
+  loki.yaml: |
+    auth_enabled: true
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+      grpc_server_max_recv_msg_size: 8194304
+      grpc_server_max_send_msg_size: 8194304
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /tmp/loki
+      storage:
+        filesystem:
+          chunks_directory: /tmp/loki/chunks
+          rules_directory: /tmp/loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+    frontend:
+      max_outstanding_per_tenant: 2048
+      encoding: protobuf
+    pattern_ingester:
+      enabled: true
+      metric_aggregation:
+        loki_address: 127.0.0.1:3100
+    limits_config:
+      max_global_streams_per_user: 0
+      ingestion_rate_mb: 50000
+      ingestion_burst_size_mb: 50000
+      volume_enabled: true
+    query_range:
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            max_size_mb: 100
+    querier:
+      per_request_limits_enabled: true
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+  loki-overrides.yaml: |
+    configs:
+      "1":
+        log_push_request: false
+        log_push_request_streams: false
+    overrides:
+      "1":
+        allow_structured_metadata: true
+        pattern_persistence_enabled: true
+        volume_enabled: true
+        retention_period: 30d
+        max_query_length: 0d
+        reject_old_samples: false
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200
+    distributor:
+      receivers:
+        jaeger:
+          protocols:
+            thrift_http: {}
+            grpc: {}
+            thrift_binary: {}
+            thrift_compact: {}
+        zipkin: {}
+        otlp:
+          protocols:
+            http:
+              endpoint: 0.0.0.0:4318
+            grpc:
+              endpoint: 0.0.0.0:4317
+    compactor:
+      compaction:
+        compaction_window: 1h
+        max_block_bytes: 100000000
+        block_retention: 1h
+        compacted_block_retention: 10m
+    metrics_generator:
+      registry:
+        external_labels:
+          source: tempo
+          cluster: {{ .Values.clusterName | quote }}
+      traces_storage:
+        path: /tmp/tempo/generator/traces
+      storage:
+        path: /tmp/tempo/generator/wal
+        remote_write:
+          - url: http://{{ include "logs-drilldown.fullname" . }}-prometheus:9090/api/v1/write
+            send_exemplars: true
+    storage:
+      trace:
+        backend: local
+        wal:
+          path: /tmp/tempo/wal
+        local:
+          path: /tmp/tempo/blocks
+    overrides:
+      metrics_generator_processors: [service-graphs, span-metrics, local-blocks]
+  prometheus.yaml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: {{ .Values.clusterName | quote }}
+    scrape_configs:
+      - job_name: grafana
+        static_configs:
+          - targets: [{{ printf "%s-grafana:3001" (include "logs-drilldown.fullname" .) | quote }}]
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: __metrics_path__
+            regex: (.+)
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+  alloy.alloy: |
+    loki.write "default" {
+      external_labels = {
+        service_name = "faro",
+        cluster = "{{ .Values.clusterName }}",
+      }
+      endpoint {
+        url = "http://{{ include "logs-drilldown.fullname" . }}-loki:3100/loki/api/v1/push"
+        headers = {
+          "X-Scope-OrgID" = "{{ .Values.loki.tenantId }}",
+        }
+      }
+    }
+    loki.process "logs_process_client" {
+      forward_to = [loki.write.default.receiver]
+      stage.logfmt {
+        mapping = { "kind" = "", "service_name" = "", "app" = "" }
+      }
+      stage.labels {
+        values = { "kind" = "kind", "service_name" = "service_name", "app" = "app" }
+      }
+    }
+    logging {
+      level = "debug"
+      format = "json"
+      write_to = [loki.write.default.receiver]
+    }
+    tracing {
+      sampling_fraction = 1
+      write_to = [otelcol.exporter.otlp.tempo.input]
+    }
+    otelcol.exporter.otlp "tempo" {
+      client {
+        endpoint = "{{ include "logs-drilldown.fullname" . }}-tempo:4317"
+        tls {
+          insecure = true
+          insecure_skip_verify = true
+        }
+      }
+    }
+    faro.receiver "frontend" {
+      server {
+        listen_address = "0.0.0.0"
+        listen_port = 12347
+        cors_allowed_origins = ["*"]
+      }
+      output {
+        logs = [loki.write.default.receiver]
+        traces = [otelcol.exporter.otlp.tempo.input]
+      }
+    }

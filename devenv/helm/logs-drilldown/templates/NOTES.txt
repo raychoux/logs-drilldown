@@ -1,0 +1,18 @@
+The complete Logs Drilldown development stack is installed in Kubernetes.
+
+Verify it:
+  make status
+  make test
+
+Local endpoints are exposed by Docker Desktop LoadBalancer services:
+  Grafana:    http://localhost:3001/grafana
+  Loki:       http://localhost:3100
+  Tempo:      http://localhost:3200
+  Prometheus: http://localhost:9090
+  Alloy:      http://localhost:12345
+
+Pod monitor dashboard:
+  http://localhost:3001/grafana/d/{{ .Values.grafana.dashboardUid }}/{{ .Values.grafana.dashboardSlug }}
+
+Logs Drilldown service:
+  pod-monitor-demo

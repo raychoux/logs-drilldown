@@ -1,0 +1,298 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-loki
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "logs-drilldown.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: loki
+  template:
+    metadata:
+      labels:
+        {{- include "logs-drilldown.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: loki
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: loki
+          image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
+          imagePullPolicy: {{ .Values.loki.image.pullPolicy }}
+          args:
+            - -config.file=/etc/loki/loki.yaml
+            - -runtime-config.file=/etc/loki/loki-overrides.yaml
+          env:
+            - name: LOG_CLUSTER_DEPTH
+              value: "8"
+            - name: LOG_SIM_TH
+              value: "0.3"
+          ports:
+            - name: http
+              containerPort: 3100
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.loki.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki/loki.yaml
+              subPath: loki.yaml
+            - name: config
+              mountPath: /etc/loki/loki-overrides.yaml
+              subPath: loki-overrides.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "logs-drilldown.fullname" . }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-loki
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+spec:
+  type: LoadBalancer
+  selector:
+    {{- include "logs-drilldown.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-prometheus
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "logs-drilldown.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "logs-drilldown.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: prometheus
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "logs-drilldown.fullname" . }}-prometheus
+      containers:
+        - name: prometheus
+          image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.prometheus.image.pullPolicy }}
+          args:
+            - --enable-feature=remote-write-receiver
+            - --enable-feature=exemplar-storage
+            - --enable-feature=native-histograms
+            - --config.file=/etc/prometheus/prometheus.yaml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yaml
+              subPath: prometheus.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "logs-drilldown.fullname" . }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-prometheus
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+spec:
+  type: LoadBalancer
+  selector:
+    {{- include "logs-drilldown.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-tempo
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "logs-drilldown.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tempo
+  template:
+    metadata:
+      labels:
+        {{- include "logs-drilldown.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tempo
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: tempo
+          image: "{{ .Values.tempo.image.repository }}:{{ .Values.tempo.image.tag }}"
+          imagePullPolicy: {{ .Values.tempo.image.pullPolicy }}
+          args: [-config.file=/etc/tempo/tempo.yaml]
+          ports:
+            - {name: http, containerPort: 3200}
+            - {name: jaeger, containerPort: 14268}
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.tempo.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo/tempo.yaml
+              subPath: tempo.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "logs-drilldown.fullname" . }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-tempo
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+spec:
+  type: LoadBalancer
+  selector:
+    {{- include "logs-drilldown.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+  ports:
+    - {name: http, port: 3200, targetPort: http}
+    - {name: jaeger, port: 14268, targetPort: jaeger}
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-alloy
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alloy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "logs-drilldown.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alloy
+  template:
+    metadata:
+      labels:
+        {{- include "logs-drilldown.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alloy
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: alloy
+          image: "{{ .Values.alloy.image.repository }}:{{ .Values.alloy.image.tag }}"
+          imagePullPolicy: {{ .Values.alloy.image.pullPolicy }}
+          args: [run, --server.http.listen-addr=0.0.0.0:12345, --stability.level=public-preview, /etc/alloy/config.alloy]
+          ports:
+            - {name: http, containerPort: 12345}
+            - {name: faro, containerPort: 12347}
+          resources:
+            {{- toYaml .Values.alloy.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy/config.alloy
+              subPath: alloy.alloy
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "logs-drilldown.fullname" . }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-alloy
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+spec:
+  type: LoadBalancer
+  selector:
+    {{- include "logs-drilldown.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alloy
+  ports:
+    - {name: http, port: 12345, targetPort: http}
+    - {name: faro, port: 12347, targetPort: faro}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logs-drilldown.fullname" . }}-generator
+  labels:
+    {{- include "logs-drilldown.labels" . | nindent 4 }}
+    app.kubernetes.io/component: generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "logs-drilldown.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: generator
+  template:
+    metadata:
+      labels:
+        {{- include "logs-drilldown.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: generator
+    spec:
+      containers:
+        - name: generator
+          image: "{{ .Values.generator.image.repository }}:{{ .Values.generator.image.tag }}"
+          imagePullPolicy: {{ .Values.generator.image.pullPolicy }}
+          args:
+            - -url
+            - http://{{ include "logs-drilldown.fullname" . }}-loki:3100/loki/api/v1/push
+            - -tenant-id=1
+            - -trace-url
+            - {{ include "logs-drilldown.fullname" . }}-tempo:4317
+          env:
+            - name: OTLP_ENDPOINT
+              value: http://{{ include "logs-drilldown.fullname" . }}-loki:3100/otlp
+            - name: GENERATOR_CI_DATA
+              value: "1"
+          resources:
+            {{- toYaml .Values.generator.resources | nindent 12 }}

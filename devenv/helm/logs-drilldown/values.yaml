@@ -1,0 +1,105 @@
+clusterName: docker-desktop
+
+grafana:
+  image:
+    repository: logs-drilldown-grafana
+    tag: dev
+    pullPolicy: Never
+  rootUrl: http://localhost:3001/grafana
+  dashboardUid: grafana-lokiexplore-pod-monitor
+  dashboardSlug: pod-monitor
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+
+loki:
+  image:
+    repository: grafana/loki
+    tag: '3.7@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8'
+    pullPolicy: IfNotPresent
+  tenantId: '1'
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+
+tempo:
+  image:
+    repository: grafana/tempo
+    tag: '2.10.7@sha256:032b3acb51ed02c4b801473d54bb63e9e9f13738d215126d9843c30283794f4b'
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+
+prometheus:
+  image:
+    repository: prom/prometheus
+    tag: 'v2.55.1@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3'
+    pullPolicy: IfNotPresent
+  retention: 2h
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+
+alloy:
+  image:
+    repository: grafana/alloy
+    tag: 'latest@sha256:85e4a706181741dd735d9a69bea81f9e03e16d5349bff46dd9640379f143c007'
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+generator:
+  image:
+    repository: logs-drilldown-generator
+    tag: dev
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+
+demo:
+  replicas: 1
+  image:
+    repository: nginx
+    tag: 1.27-alpine
+    pullPolicy: IfNotPresent
+  logIntervalSeconds: 2
+  resources:
+    requests:
+      cpu: 20m
+      memory: 24Mi
+    limits:
+      cpu: 200m
+      memory: 96Mi
+
+tests:
+  image:
+    repository: curlimages/curl
+    tag: 8.9.1
+    pullPolicy: IfNotPresent
