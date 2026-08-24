@@ -49,11 +49,6 @@
       "action": "datasources:explore",
       "addToNav": true,
       "defaultNav": true
-    },
-    {
-      "type": "dashboard",
-      "name": "Logs Drilldown / Pod monitor",
-      "path": "dashboards/pod-monitor.json"
     }
   ],
   "roles": [],

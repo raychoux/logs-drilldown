@@ -87,7 +87,7 @@ const nativeLogDetailsInlineWidth = '50%';
 const nativeLogContextDialogSelector = '[role="dialog"]:has([data-testid="revert-button"])';
 const nativeLogContextWrapSelector = 'input[role="switch"]';
 const nativeLogDetailsCloseSelector = 'button[aria-label^="Close log details"]';
-const podDashboardPath = '/d/grafana-lokiexplore-pod-monitor/pod-monitor';
+const podMonitorDashboardUrl = '/d/grafana-lokiexplore-pod-monitor/pod-monitor';
 
 export interface PodMonitorTarget {
   dashboardUrl: string;
@@ -223,7 +223,7 @@ export function getPodMonitorTarget(
     }
 
     return {
-      dashboardUrl: `${appSubUrl}${podDashboardPath}?${dashboardParams.toString()}`,
+      dashboardUrl: `${appSubUrl}${podMonitorDashboardUrl}?${dashboardParams.toString()}`,
       datasourceUid,
       from: sourceParams.get('from') ?? 'now-15m',
       logQuery,

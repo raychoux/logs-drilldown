@@ -51,7 +51,7 @@ export function PodMonitorAction({ dashboardUrl, target }: Props) {
                 />
               }
             >
-              <PodMonitorDashboard target={target} />
+              <PodMonitorDashboard dashboardUrl={dashboardUrl} />
             </Suspense>
             <Modal.ButtonRow>
               <LinkButton href={dashboardUrl} target="_blank" rel="noreferrer" variant="secondary">
