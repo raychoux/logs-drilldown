@@ -3,6 +3,12 @@ export const testIds = {
     apiKey: 'data-testid ac-api-key',
     apiUrl: 'data-testid ac-api-url',
     container: 'data-testid ac-container',
+    dashboardRules: 'data-testid ac-dashboard-rules',
+    defaultTimeRangeEnabled: 'data-testid ac-default-time-range-enabled',
+    defaultTimeRangeFrom: 'data-testid ac-default-time-range-from',
+    defaultTimeRangeTo: 'data-testid ac-default-time-range-to',
+    interval: 'data-testid ac-interval-input',
+    pattern: 'data-testid ac-patterns-disabled',
     submit: 'data-testid ac-submit-form',
     defaultColumns: {
       labels: {

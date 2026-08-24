@@ -4,14 +4,6 @@ import { EmbeddedDashboard } from '@grafana/runtime';
 
 import { testIds } from 'services/testIds';
 
-export interface PodMonitorDashboardTarget {
-  datasourceUid: string;
-  from: string;
-  logQuery: string;
-  pod: string;
-  to: string;
-}
-
 export interface PodMonitorDashboardConfig {
   initialState: string;
   uid: string;

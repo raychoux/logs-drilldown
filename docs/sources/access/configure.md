@@ -40,12 +40,13 @@ Refer to [Plugin management](https://grafana.com/docs/grafana/latest/administrat
 
 ## Configuration tab
 
-The **Configuration** tab has four settings, all aimed at an administrator setting up a consistent experience for their team:
+The **Configuration** tab has five settings, all aimed at an administrator setting up a consistent experience for their team:
 
 - **Default data source**: pick which Loki instance users land on when they first open the app
 - **Default time range**: override the built-in 15-minute default with a range that matches your team's workflows
 - **Maximum time picker interval**: cap how far back users can query, typically to match your Loki retention period or protect query performance
 - **Disable Loki patterns**: turn off the Patterns tab and API calls if your Loki instance doesn't have pattern ingestion enabled
+- **Log field dashboard rules**: show one or more Grafana dashboard actions when a log row contains matching indexed labels or structured metadata
 
 ### Configure settings
 
@@ -67,6 +68,29 @@ Select a setting to configure it:
 - **Maximum time picker interval** sets an upper bound on the time range interval that users can select in the time picker. The minimum accepted value is one hour (`60m`). Example values: `7d`, `24h`, `2w`. If left empty, users can select any time range.
 
 - **Disable Loki patterns** controls whether the Patterns tab and the [Loki Patterns API](https://grafana.com/docs/loki/latest/reference/loki-http-api/#patterns-detection) endpoint are used by Logs Drilldown.
+
+- **Log field dashboard rules** is an ordered JSON array. Every rule that matches the selected log row adds a dashboard button to the native log details toolbar. Rules can match `indexed`, `structured`, or `indexed-or-structured` fields by `exact`, `contains`, or `regex` field name. An optional `valueRegex` further restricts matching values. For example:
+
+  ```json
+  [
+    {
+      "title": "Pod overview",
+      "field": "pod",
+      "fieldMatch": "contains",
+      "source": "indexed-or-structured",
+      "dashboardUrl": "/d/pod-overview/pods?var-pod={{value}}&var-namespace={{fields.namespace}}"
+    },
+    {
+      "title": "Service dashboard",
+      "field": "service_name",
+      "fieldMatch": "exact",
+      "source": "indexed",
+      "dashboardUrl": "/d/service-overview/services?var-service={{value}}"
+    }
+  ]
+  ```
+
+  Dashboard URLs must point to a dashboard on the same Grafana instance using a `/d/<uid>/<slug>` route. URL templates support `{{value}}`, `{{field}}`, `{{logQuery}}`, `{{datasource}}`, `{{from}}`, `{{to}}`, `{{timezone}}`, and `{{fields.<name>}}`. Parameters with unavailable field placeholders are omitted. The current `from`, `to`, and `timezone` are added when the URL does not set them. Save an empty array to disable dashboard actions.
 
 After configuring a setting, click **Save settings** to apply the changes.
 

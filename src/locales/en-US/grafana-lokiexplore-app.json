@@ -5,6 +5,8 @@
     },
     "app-config": {
       "active-users-reload-reflect-configuration-changes": "Active users must reload the app to reflect configuration changes.",
+      "dashboard-rules-description": "Ordered JSON rules that match indexed labels or structured metadata to Grafana dashboards. URL templates support {{value}}, {{field}}, {{logQuery}}, {{datasource}}, and {{fields.<name>}}.",
+      "dashboard-rules-label": "Log field dashboard rules",
       "default-columns": {
         "add-label": {
           "add-label": "Add label",
@@ -744,10 +746,9 @@
       },
       "pod-monitor-action": {
         "close": "Close",
-        "loading": "Loading pod dashboard...",
-        "open": "Monitor pod",
-        "open-full": "Open full dashboard",
-        "title": "Pod monitoring: {{pod}}"
+        "dashboard-title": "{{title}}: {{value}}",
+        "loading": "Loading dashboard...",
+        "open-full": "Open full dashboard"
       },
       "text-loading": "Loading..."
     },

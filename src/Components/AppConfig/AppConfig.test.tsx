@@ -125,6 +125,30 @@ describe('AppConfig', () => {
       expect(screen.getByLabelText('Disable patterns')).toBeInTheDocument();
     });
 
+    it('renders dashboard rules from jsonData', () => {
+      const plugin = createPluginMeta({
+        meta: {
+          ...createPluginMeta().meta,
+          jsonData: {
+            dashboardRules: [
+              {
+                dashboardUrl: '/d/apps/apps',
+                field: 'app',
+                fieldMatch: 'exact',
+                source: 'indexed',
+                title: 'App dashboard',
+              },
+            ],
+          },
+        } as any,
+      });
+      renderAppConfig(plugin);
+
+      expect((screen.getByTestId('data-testid ac-dashboard-rules') as HTMLTextAreaElement).value).toContain(
+        'App dashboard'
+      );
+    });
+
     it('renders Save settings button', () => {
       renderAppConfig();
       expect(screen.getByRole('button', { name: 'Save settings' })).toBeInTheDocument();
@@ -211,6 +235,41 @@ describe('AppConfig', () => {
   });
 
   describe('Save settings', () => {
+    it('disables Save for invalid dashboard rules', () => {
+      renderAppConfig();
+      fireEvent.change(screen.getByTestId('data-testid ac-dashboard-rules'), { target: { value: '{' } });
+
+      expect(screen.getByText('Dashboard rules must be valid JSON.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+    });
+
+    it('saves validated dashboard rules', async () => {
+      renderAppConfig();
+      const rules = [
+        {
+          dashboardUrl: '/d/apps/apps?var-app={{value}}',
+          field: 'app',
+          fieldMatch: 'exact',
+          source: 'indexed',
+          title: 'App dashboard',
+        },
+      ];
+      fireEvent.change(screen.getByTestId('data-testid ac-dashboard-rules'), {
+        target: { value: JSON.stringify(rules) },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+      await waitFor(() => {
+        expect(mockGetBackendSrv().fetch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              jsonData: expect.objectContaining({ dashboardRules: rules }),
+            }),
+          })
+        );
+      });
+    });
+
     it('calls updatePlugin and reloads on Save', async () => {
       const plugin = createPluginMeta();
       renderAppConfig(plugin);

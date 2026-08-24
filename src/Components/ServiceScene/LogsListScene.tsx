@@ -20,6 +20,7 @@ import {
 } from '@grafana/scenes';
 import { Options } from '@grafana/schema/dist/esm/raw/composable/logs/panelcfg/x/LogsPanelCfg_types.gen';
 
+import { plugin } from '../../module';
 import { ActionBarScene } from './ActionBarScene';
 import { JSONLogsScene } from './JSONLogsScene';
 import { ErrorType } from './LogsPanelError';
@@ -36,10 +37,15 @@ import { SelectedTableRow } from 'Components/Table/LogLineCellComponent';
 import { getFeatureFlag } from 'featureFlags/openFeature';
 import { reportAppInteraction, USER_EVENTS_ACTIONS, USER_EVENTS_PAGES } from 'services/analytics';
 import { areArraysEqual, areArraysStrictlyEqual } from 'services/comparison';
-import { LabelType } from 'services/fieldsTypes';
+import {
+  DEFAULT_DASHBOARD_RULES,
+  DashboardRule,
+  DashboardTarget,
+  getDashboardTargets,
+  parseDashboardRules,
+} from 'services/dashboardRules';
 import { logger } from 'services/logger';
-import { isEmptyLogsResult, parseLogsFrame } from 'services/logsFrame';
-import { getLabelTypeFromFrame } from 'services/lokiQuery';
+import { isEmptyLogsResult } from 'services/logsFrame';
 import { narrowLogsVisualizationType, narrowSelectedTableRow, unknownToStrings } from 'services/narrowing';
 import { getRouteParams } from 'services/routing';
 import {
@@ -87,151 +93,18 @@ const nativeLogDetailsInlineWidth = '50%';
 const nativeLogContextDialogSelector = '[role="dialog"]:has([data-testid="revert-button"])';
 const nativeLogContextWrapSelector = 'input[role="switch"]';
 const nativeLogDetailsCloseSelector = 'button[aria-label^="Close log details"]';
-const podMonitorDashboardUrl = '/d/grafana-lokiexplore-pod-monitor/pod-monitor';
-
-export interface PodMonitorTarget {
-  dashboardUrl: string;
-  datasourceUid: string;
-  from: string;
-  logQuery: string;
-  pod: string;
-  to: string;
-}
-
-interface DataFrameRow {
-  dataFrame: DataFrame;
-  index: number;
-}
-
-interface TypedRowValue {
-  key: string;
-  type: LabelType;
-  value: string;
-}
-
-function normalizeLogText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
-function getCandidateRows(dataFrames: DataFrame[], rowIndex: number, rowText?: string): DataFrameRow[] {
-  const indexedRows = dataFrames
-    .filter((dataFrame) => rowIndex >= 0 && rowIndex < dataFrame.length)
-    .map((dataFrame) => ({ dataFrame, index: rowIndex }));
-  if (!rowText) {
-    return indexedRows;
+export function getConfiguredDashboardRules(): DashboardRule[] {
+  const configuredRules = plugin.meta.jsonData?.dashboardRules;
+  if (configuredRules === undefined) {
+    return DEFAULT_DASHBOARD_RULES;
   }
 
-  const normalizedRowText = normalizeLogText(rowText);
-  const matchesRowText = ({ dataFrame, index }: DataFrameRow) => {
-    const body = parseLogsFrame(dataFrame)?.bodyField.values[index];
-    return body != null && normalizedRowText.includes(normalizeLogText(String(body)));
-  };
-  const indexedMatches = indexedRows.filter(matchesRowText);
-  if (indexedMatches.length > 0) {
-    return indexedMatches;
+  try {
+    return parseDashboardRules(configuredRules);
+  } catch (error) {
+    logger.error(error, { msg: 'Invalid dashboard matching rules configuration' });
+    return [];
   }
-
-  const textMatches: DataFrameRow[] = [];
-  for (const dataFrame of dataFrames) {
-    for (let index = 0; index < dataFrame.length; index++) {
-      const candidate = { dataFrame, index };
-      if (matchesRowText(candidate)) {
-        textMatches.push(candidate);
-      }
-    }
-  }
-  return textMatches.length > 0 ? textMatches : indexedRows;
-}
-
-function getTypedRowValue(row: DataFrameRow, keyMatcher: (key: string) => boolean): TypedRowValue | undefined {
-  const labels = parseLogsFrame(row.dataFrame)?.getLogFrameLabelsAsLabels()?.[row.index] ?? {};
-  for (const [key, value] of Object.entries(labels)) {
-    const type = getLabelTypeFromFrame(key, row.dataFrame, row.index);
-    if (
-      keyMatcher(key.toLowerCase()) &&
-      (type === LabelType.Indexed || type === LabelType.StructuredMetadata) &&
-      value != null &&
-      String(value).trim()
-    ) {
-      return { key, type, value: String(value) };
-    }
-  }
-  return undefined;
-}
-
-function toLogQLIdentifier(key: string): string {
-  return key.replace(/[^a-zA-Z0-9_]/g, '_');
-}
-
-function getPodLogQuery(row: DataFrameRow, pod: TypedRowValue): string {
-  const podMatcher = `${toLogQLIdentifier(pod.key)}=${JSON.stringify(pod.value)}`;
-  if (pod.type === LabelType.Indexed) {
-    return `{${podMatcher}}`;
-  }
-
-  const preferredStreamLabels = ['service_name', 'service', 'cluster', 'namespace', 'env'];
-  for (const preferredKey of preferredStreamLabels) {
-    const streamLabel = getTypedRowValue(row, (key) => key === preferredKey);
-    if (streamLabel?.type === LabelType.Indexed) {
-      return `{${toLogQLIdentifier(streamLabel.key)}=${JSON.stringify(streamLabel.value)}} | ${podMatcher}`;
-    }
-  }
-
-  return `{service_name=~".+"} | ${podMatcher}`;
-}
-
-export function getPodMonitorTarget(
-  dataFrames: DataFrame[],
-  rowIndex: number,
-  currentSearch = '',
-  rowText?: string,
-  appSubUrl = config.appSubUrl ?? ''
-): PodMonitorTarget | undefined {
-  for (const row of getCandidateRows(dataFrames, rowIndex, rowText)) {
-    const pod = getTypedRowValue(row, (key) => key.includes('pod'));
-    if (!pod) {
-      continue;
-    }
-
-    const namespace = getTypedRowValue(row, (key) => key.includes('namespace'));
-    const cluster = getTypedRowValue(row, (key) => key.includes('cluster'));
-    const service = getTypedRowValue(row, (key) => key === 'service_name' || key === 'service');
-    const sourceParams = new URLSearchParams(currentSearch);
-    const dashboardParams = new URLSearchParams();
-    for (const key of ['from', 'to', 'timezone']) {
-      const value = sourceParams.get(key);
-      if (value) {
-        dashboardParams.set(key, value);
-      }
-    }
-    dashboardParams.set('var-pod', pod.value);
-    const logQuery = getPodLogQuery(row, pod);
-    dashboardParams.set('var-pod_query', logQuery);
-    if (namespace) {
-      dashboardParams.set('var-namespace', namespace.value);
-    }
-    if (cluster) {
-      dashboardParams.set('var-cluster', cluster.value);
-    }
-    if (service) {
-      dashboardParams.set('var-service', service.value);
-    }
-
-    const datasourceUid = sourceParams.get('var-ds') ?? '';
-    if (datasourceUid) {
-      dashboardParams.set('var-ds', datasourceUid);
-    }
-
-    return {
-      dashboardUrl: `${appSubUrl}${podMonitorDashboardUrl}?${dashboardParams.toString()}`,
-      datasourceUid,
-      from: sourceParams.get('from') ?? 'now-15m',
-      logQuery,
-      pod: pod.value,
-      to: sourceParams.get('to') ?? 'now',
-    };
-  }
-  return undefined;
 }
 
 export function initializeNativeLogContextWrap(
@@ -332,9 +205,9 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
   public static Component = ({ model }: SceneComponentProps<LogsListScene>) => {
     const { panel } = model.useState();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
-    const [podMonitorPortal, setPodMonitorPortal] = useState<{
+    const [dashboardPortal, setDashboardPortal] = useState<{
       container: HTMLSpanElement;
-      target: PodMonitorTarget;
+      targets: DashboardTarget[];
     }>();
     const height = useChromeHeaderHeight();
 
@@ -358,6 +231,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       }
 
       const ownerDocument = root.ownerDocument;
+      const dashboardRules = getConfiguredDashboardRules();
       let anchoredCurrentPane = false;
       let initializedLogContextDialog: HTMLElement | undefined;
       let resetAnchorTimer: ReturnType<typeof setTimeout> | undefined;
@@ -365,14 +239,14 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       let originalPaneStyle: string | null = null;
       let selectedLogIndex: number | undefined;
       let selectedLogText: string | undefined;
-      let podMonitorContainer: HTMLSpanElement | undefined;
-      let renderedPodMonitorUrl: string | undefined;
+      let dashboardActionsContainer: HTMLSpanElement | undefined;
+      let renderedDashboardTargetsKey: string | undefined;
 
-      const removePodMonitorAction = () => {
-        setPodMonitorPortal(undefined);
-        podMonitorContainer?.remove();
-        podMonitorContainer = undefined;
-        renderedPodMonitorUrl = undefined;
+      const removeDashboardActions = () => {
+        setDashboardPortal(undefined);
+        dashboardActionsContainer?.remove();
+        dashboardActionsContainer = undefined;
+        renderedDashboardTargetsKey = undefined;
       };
 
       const applyOriginalPaneStyle = () => {
@@ -435,42 +309,45 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         });
       };
 
-      const updatePodMonitorAction = (pane: HTMLElement) => {
+      const updateDashboardActions = (pane: HTMLElement) => {
         const visibleLogSeries = model.getVisibleLogSeries();
-        const target =
+        const targets =
           selectedLogIndex === undefined
-            ? undefined
-            : getPodMonitorTarget(
+            ? []
+            : getDashboardTargets(
                 visibleLogSeries,
                 selectedLogIndex,
+                dashboardRules,
                 locationService.getLocation().search,
-                selectedLogText
+                selectedLogText,
+                config.appSubUrl ?? ''
               );
         const closeButton = pane.querySelector<HTMLButtonElement>(nativeLogDetailsCloseSelector);
         const buttonGroup = closeButton?.parentElement;
         const toolbar = buttonGroup?.parentElement;
-        if (!target || !buttonGroup || !toolbar) {
-          removePodMonitorAction();
+        if (targets.length === 0 || !buttonGroup || !toolbar) {
+          removeDashboardActions();
           return;
         }
 
-        if (!podMonitorContainer || podMonitorContainer.parentElement !== toolbar) {
-          removePodMonitorAction();
-          podMonitorContainer = ownerDocument.createElement('span');
-          toolbar.insertBefore(podMonitorContainer, buttonGroup);
+        if (!dashboardActionsContainer || dashboardActionsContainer.parentElement !== toolbar) {
+          removeDashboardActions();
+          dashboardActionsContainer = ownerDocument.createElement('span');
+          toolbar.insertBefore(dashboardActionsContainer, buttonGroup);
         }
-        if (renderedPodMonitorUrl === target.dashboardUrl) {
+        const targetsKey = targets.map((target) => `${target.title}:${target.dashboardUrl}`).join('|');
+        if (renderedDashboardTargetsKey === targetsKey) {
           return;
         }
 
-        renderedPodMonitorUrl = target.dashboardUrl;
-        setPodMonitorPortal({ container: podMonitorContainer, target });
+        renderedDashboardTargetsKey = targetsKey;
+        setDashboardPortal({ container: dashboardActionsContainer, targets });
       };
 
       const updateDetailsPane = () => {
         const pane = ownerDocument.querySelector<HTMLElement>(nativeLogDetailsSelector);
         if (!pane) {
-          removePodMonitorAction();
+          removeDashboardActions();
           restorePaneStyle();
           if (resetAnchorTimer === undefined) {
             resetAnchorTimer = setTimeout(() => {
@@ -501,7 +378,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         } else {
           restorePaneStyle();
         }
-        updatePodMonitorAction(pane);
+        updateDashboardActions(pane);
       };
 
       const updateNativeOverlays = () => {
@@ -540,7 +417,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         if (resetAnchorTimer !== undefined) {
           clearTimeout(resetAnchorTimer);
         }
-        removePodMonitorAction();
+        removeDashboardActions();
         restorePaneStyle();
       };
     }, [model, panel]);
@@ -564,10 +441,14 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         <div className={styles.panelWrapper} ref={wrapperRef}>
           <panel.Component model={panel} />
         </div>
-        {podMonitorPortal
+        {dashboardPortal
           ? createPortal(
-              <PodMonitorAction dashboardUrl={podMonitorPortal.target.dashboardUrl} target={podMonitorPortal.target} />,
-              podMonitorPortal.container
+              <div className={styles.dashboardActions}>
+                {dashboardPortal.targets.map((target) => (
+                  <PodMonitorAction key={`${target.title}:${target.dashboardUrl}`} target={target} />
+                ))}
+              </div>,
+              dashboardPortal.container
             )
           : null}
       </>
@@ -970,6 +851,11 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
 }
 
 const styles = {
+  dashboardActions: css({
+    display: 'inline-flex',
+    gap: 4,
+    marginRight: 4,
+  }),
   panelWrapper: css({
     // Hack to select internal div
     'section > div[class$="panel-content"]': css({

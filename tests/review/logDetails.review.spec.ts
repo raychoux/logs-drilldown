@@ -108,17 +108,25 @@ test('shows a pod monitor dashboard action for pod metadata', async ({ page }, t
   await expect(nativeLogRow).toBeVisible({ timeout: 45_000 });
   await nativeLogRow.click();
 
-  const monitorPod = page.getByTestId(testIds.logDetails.monitorPod);
-  await expect(monitorPod).toBeVisible();
-  await expect(monitorPod).toHaveText('Monitor pod');
-  await expect(monitorPod).toHaveAttribute('data-pod', /tempo-ingester-/);
-  await expect(monitorPod).toHaveAttribute(
+  const dashboardActions = page.getByTestId(testIds.logDetails.monitorPod);
+  await expect(dashboardActions).toHaveCount(2);
+  const podOverview = dashboardActions.filter({ hasText: 'Pod overview' });
+  const podDiagnostics = dashboardActions.filter({ hasText: 'Pod diagnostics' });
+  await expect(podOverview).toBeVisible();
+  await expect(podDiagnostics).toBeVisible();
+  await expect(podOverview).toHaveAttribute('data-value', /tempo-ingester-/);
+  await expect(podOverview).toHaveAttribute(
     'data-dashboard-url',
-    /\/d\/grafana-lokiexplore-pod-monitor\/pod-monitor\?.*var-pod=tempo-ingester-/
+    /\/d\/grafana-lokiexplore-pod-monitor\/pod-monitor\?view=overview&.*var-pod=tempo-ingester-/
   );
+  await expect(podDiagnostics).toHaveAttribute(
+    'data-dashboard-url',
+    /\/d\/grafana-lokiexplore-pod-monitor\/pod-monitor\?view=diagnostics&.*var-pod=tempo-ingester-/
+  );
+  await capture(page, testInfo, 'log-details-multi-dashboard-actions');
 
   const logsUrl = page.url();
-  await monitorPod.click();
+  await podOverview.click();
 
   const monitorDialog = page.getByTestId(testIds.logDetails.monitorPodDialog);
   const monitorDashboard = page.getByTestId(testIds.logDetails.monitorPodDashboard);
@@ -159,9 +167,9 @@ test('renders real Kubernetes pod metrics and logs in the pod monitor dashboard'
   await expect(nativeLogRow).toBeVisible({ timeout: 45_000 });
   await nativeLogRow.click();
 
-  const monitorPod = page.getByTestId(testIds.logDetails.monitorPod);
+  const monitorPod = page.getByTestId(testIds.logDetails.monitorPod).filter({ hasText: 'Pod overview' });
   await expect(monitorPod).toBeVisible();
-  await expect(monitorPod).toHaveAttribute('data-pod', /logs-drilldown-dev-demo-/);
+  await expect(monitorPod).toHaveAttribute('data-value', /logs-drilldown-dev-demo-/);
   await monitorPod.click();
 
   const monitorDialog = page.getByTestId(testIds.logDetails.monitorPodDialog);

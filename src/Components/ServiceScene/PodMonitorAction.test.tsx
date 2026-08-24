@@ -3,7 +3,8 @@ import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import { PodMonitorAction } from './PodMonitorAction';
-import { getPodMonitorDashboardConfig, PodMonitorDashboardTarget } from './PodMonitorDashboard';
+import { getPodMonitorDashboardConfig } from './PodMonitorDashboard';
+import { DashboardTarget } from 'services/dashboardRules';
 import { testIds } from 'services/testIds';
 
 jest.mock('@grafana/runtime', () => {
@@ -21,12 +22,16 @@ jest.mock('@grafana/runtime', () => {
   };
 });
 
-const target: PodMonitorDashboardTarget = {
+const dashboardUrl = '/grafana/d/existing-pod-dashboard/pod-overview?var-pod=tempo-0';
+const target: DashboardTarget = {
+  dashboardUrl,
   datasourceUid: 'loki',
+  field: 'pod',
   from: 'now-15m',
   logQuery: '{service_name="tempo"} | pod="tempo-0"',
-  pod: 'tempo-0',
+  title: 'Pod overview',
   to: 'now',
+  value: 'tempo-0',
 };
 
 describe('getPodMonitorDashboardConfig', () => {
@@ -50,8 +55,7 @@ describe('getPodMonitorDashboardConfig', () => {
 
 describe('PodMonitorAction', () => {
   it('opens and closes an existing Grafana dashboard URL without navigating', () => {
-    const dashboardUrl = '/grafana/d/existing-pod-dashboard/pod-overview?var-pod=tempo-0';
-    render(<PodMonitorAction dashboardUrl={dashboardUrl} target={target} />);
+    render(<PodMonitorAction target={target} />);
 
     fireEvent.click(screen.getByTestId(testIds.logDetails.monitorPod));
 
@@ -64,7 +68,7 @@ describe('PodMonitorAction', () => {
       'data-dashboard-url',
       dashboardUrl
     );
-    expect(screen.getByRole('dialog', { name: 'Pod monitoring: tempo-0' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Pod overview: tempo-0' })).toBeVisible();
     const embeddedDashboard = screen.getByTestId('native-embedded-dashboard');
     const dashboard = getPodMonitorDashboardConfig(dashboardUrl);
     expect(embeddedDashboard).toHaveAttribute('data-uid', dashboard.uid);

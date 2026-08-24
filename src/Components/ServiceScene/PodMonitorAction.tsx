@@ -2,18 +2,19 @@ import React, { startTransition, Suspense, useState } from 'react';
 
 import { css } from '@emotion/css';
 
+import { textUtil } from '@grafana/data';
 import { t } from '@grafana/i18n';
 import { Button, LinkButton, LoadingPlaceholder, Modal } from '@grafana/ui';
 
-import { PodMonitorDashboard, PodMonitorDashboardTarget } from './PodMonitorDashboard';
+import { PodMonitorDashboard } from './PodMonitorDashboard';
+import { DashboardTarget } from 'services/dashboardRules';
 import { testIds } from 'services/testIds';
 
 interface Props {
-  dashboardUrl: string;
-  target: PodMonitorDashboardTarget;
+  target: DashboardTarget;
 }
 
-export function PodMonitorAction({ dashboardUrl, target }: Props) {
+export function PodMonitorAction({ target }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const close = () => setIsOpen(false);
   const open = () => startTransition(() => setIsOpen(true));
@@ -21,40 +22,48 @@ export function PodMonitorAction({ dashboardUrl, target }: Props) {
   return (
     <>
       <Button
-        data-dashboard-url={dashboardUrl}
-        data-pod={target.pod}
+        data-dashboard-url={target.dashboardUrl}
+        data-field={target.field}
+        data-value={target.value}
         data-testid={testIds.logDetails.monitorPod}
         icon="apps"
         onClick={open}
         size="sm"
         variant="secondary"
       >
-        {t('components.service-scene.pod-monitor-action.open', 'Monitor pod')}
+        {target.title}
       </Button>
       {isOpen && (
         <Modal
-          aria-label={t('components.service-scene.pod-monitor-action.title', 'Pod monitoring: {{pod}}', {
-            pod: target.pod,
+          aria-label={t('components.service-scene.pod-monitor-action.dashboard-title', '{{title}}: {{value}}', {
+            title: target.title,
+            value: target.value,
           })}
           className={styles.modal}
           isOpen
           onDismiss={close}
-          title={t('components.service-scene.pod-monitor-action.title', 'Pod monitoring: {{pod}}', {
-            pod: target.pod,
+          title={t('components.service-scene.pod-monitor-action.dashboard-title', '{{title}}: {{value}}', {
+            title: target.title,
+            value: target.value,
           })}
         >
           <div className={styles.content} data-testid={testIds.logDetails.monitorPodDialog}>
             <Suspense
               fallback={
                 <LoadingPlaceholder
-                  text={t('components.service-scene.pod-monitor-action.loading', 'Loading pod dashboard...')}
+                  text={t('components.service-scene.pod-monitor-action.loading', 'Loading dashboard...')}
                 />
               }
             >
-              <PodMonitorDashboard dashboardUrl={dashboardUrl} />
+              <PodMonitorDashboard dashboardUrl={target.dashboardUrl} />
             </Suspense>
             <Modal.ButtonRow>
-              <LinkButton href={dashboardUrl} target="_blank" rel="noreferrer" variant="secondary">
+              <LinkButton
+                href={textUtil.sanitizeUrl(target.dashboardUrl)}
+                target="_blank"
+                rel="noreferrer"
+                variant="secondary"
+              >
                 {t('components.service-scene.pod-monitor-action.open-full', 'Open full dashboard')}
               </LinkButton>
               <Button onClick={close} variant="primary">

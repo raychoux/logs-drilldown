@@ -15,14 +15,17 @@ import {
 } from '@grafana/data';
 import { t, Trans } from '@grafana/i18n';
 import { DataSourcePicker, getBackendSrv, locationService } from '@grafana/runtime';
-import { Alert, Button, Checkbox, Field, FieldSet, Input, useStyles2 } from '@grafana/ui';
+import { Alert, Button, Checkbox, Field, FieldSet, Input, TextArea, useStyles2 } from '@grafana/ui';
 
 import { FeatureFlagContext } from 'Components/FeatureFlagContext';
+import { DEFAULT_DASHBOARD_RULES, DashboardRule, parseDashboardRulesText } from 'services/dashboardRules';
 import { logger } from 'services/logger';
 import { getDefaultDatasourceFromDatasourceSrv, getLastUsedDataSourceFromStorage } from 'services/store';
+import { testIds } from 'services/testIds';
 import { isValidTimeRange } from 'services/utils';
 
 export type JsonData = {
+  dashboardRules?: DashboardRule[];
   dataSource?: string;
   /** When set, used as the initial time range when opening the app (if URL has no from/to). */
   defaultTimeRange?: { from: string; to: string };
@@ -31,6 +34,7 @@ export type JsonData = {
 };
 
 type State = {
+  dashboardRulesText: string;
   dataSource: string;
   defaultTimeRangeEnabled: boolean;
   defaultTimeRangeFrom: string;
@@ -77,6 +81,7 @@ const AppConfig = ({ plugin }: Props) => {
 
   const hasDefaultTimeRange = jsonData?.defaultTimeRange != null;
   const [state, setState] = useState<State>({
+    dashboardRulesText: JSON.stringify(jsonData?.dashboardRules ?? DEFAULT_DASHBOARD_RULES, null, 2),
     dataSource:
       jsonData?.dataSource ?? getDefaultDatasourceFromDatasourceSrv() ?? getLastUsedDataSourceFromStorage() ?? '',
     interval: jsonData?.interval ?? '',
@@ -86,6 +91,13 @@ const AppConfig = ({ plugin }: Props) => {
     defaultTimeRangeFrom: jsonData?.defaultTimeRange?.from ?? 'now-15m',
     defaultTimeRangeTo: jsonData?.defaultTimeRange?.to ?? 'now',
   });
+
+  const onChangeDashboardRules = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    setState({
+      ...state,
+      dashboardRulesText: event.target.value,
+    });
+  };
 
   const onChangeDatasource = (ds: DataSourceInstanceSettings) => {
     setState({
@@ -138,6 +150,13 @@ const AppConfig = ({ plugin }: Props) => {
     : null;
   const isDefaultTimeRangeValid =
     !state.defaultTimeRangeEnabled || (defaultTimeRangeValidation !== null && defaultTimeRangeValidation.valid);
+  let dashboardRules: DashboardRule[] = [];
+  let dashboardRulesError: string | undefined;
+  try {
+    dashboardRules = parseDashboardRulesText(state.dashboardRulesText);
+  } catch (error) {
+    dashboardRulesError = error instanceof Error ? error.message : 'Dashboard rules are invalid.';
+  }
 
   return (
     <FeatureFlagContext>
@@ -295,6 +314,24 @@ const AppConfig = ({ plugin }: Props) => {
             />
           </Field>
 
+          <Field
+            className={styles.marginTop}
+            description={t(
+              'components.app-config.dashboard-rules-description',
+              'Ordered JSON rules that match indexed labels or structured metadata to Grafana dashboards. URL templates support {{value}}, {{field}}, {{logQuery}}, {{datasource}}, and {{fields.<name>}}.'
+            )}
+            error={dashboardRulesError}
+            invalid={dashboardRulesError !== undefined}
+            label={t('components.app-config.dashboard-rules-label', 'Log field dashboard rules')}
+          >
+            <TextArea
+              data-testid={testIds.appConfig.dashboardRules}
+              onChange={onChangeDashboardRules}
+              rows={14}
+              value={state.dashboardRulesText}
+            />
+          </Field>
+
           <div className={styles.marginTop}>
             <Button
               type="submit"
@@ -303,6 +340,7 @@ const AppConfig = ({ plugin }: Props) => {
                 updatePluginAndReload(plugin.meta.id, {
                   enabled,
                   jsonData: {
+                    dashboardRules,
                     dataSource: state.dataSource,
                     interval: state.interval,
                     patternsDisabled: state.patternsDisabled,
@@ -316,7 +354,7 @@ const AppConfig = ({ plugin }: Props) => {
                   pinned,
                 })
               }
-              disabled={!isValid(state.interval) || !isDefaultTimeRangeValid}
+              disabled={!isValid(state.interval) || !isDefaultTimeRangeValid || dashboardRulesError !== undefined}
             >
               <Trans i18nKey="components.app-config.save-settings">Save settings</Trans>
             </Button>
@@ -370,19 +408,6 @@ const updatePluginAndReload = async (pluginId: string, data: Partial<PluginMeta<
   } catch (e) {
     logger.error(e, { msg: 'Error while updating the plugin' });
   }
-};
-
-const testIds = {
-  appConfig: {
-    container: 'data-testid ac-container',
-    datasource: 'data-testid ac-datasource-input',
-    interval: 'data-testid ac-interval-input',
-    pattern: 'data-testid ac-patterns-disabled',
-    submit: 'data-testid ac-submit-form',
-    defaultTimeRangeEnabled: 'data-testid ac-default-time-range-enabled',
-    defaultTimeRangeFrom: 'data-testid ac-default-time-range-from',
-    defaultTimeRangeTo: 'data-testid ac-default-time-range-to',
-  },
 };
 
 export const updatePlugin = async (pluginId: string, data: Partial<PluginMeta>) => {
