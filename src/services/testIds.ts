@@ -81,6 +81,9 @@ export const testIds = {
   },
   logDetails: {
     copyLink: 'data-testid log-details-copy-link',
+    dashboardMenu: 'data-testid log-details-dashboard-menu',
+    dashboardMenuButton: 'data-testid log-details-dashboard-menu-button',
+    dashboardMenuItem: 'data-testid log-details-dashboard-menu-item',
     monitorPod: 'data-testid log-details-monitor-pod',
     monitorPodDialog: 'data-testid log-details-monitor-pod-dialog',
     monitorPodDashboard: 'data-testid log-details-monitor-pod-dashboard',

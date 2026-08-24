@@ -11,29 +11,40 @@ import { DashboardTarget } from 'services/dashboardRules';
 import { testIds } from 'services/testIds';
 
 interface Props {
+  isOpen?: boolean;
+  onDismiss?: () => void;
+  showTrigger?: boolean;
   target: DashboardTarget;
 }
 
-export function PodMonitorAction({ target }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
-  const close = () => setIsOpen(false);
-  const open = () => startTransition(() => setIsOpen(true));
+export function PodMonitorAction({ isOpen, onDismiss, showTrigger = true, target }: Props) {
+  const [isInternallyOpen, setIsInternallyOpen] = useState(false);
+  const modalIsOpen = isOpen ?? isInternallyOpen;
+  const close = () => {
+    if (isOpen === undefined) {
+      setIsInternallyOpen(false);
+    }
+    onDismiss?.();
+  };
+  const open = () => startTransition(() => setIsInternallyOpen(true));
 
   return (
     <>
-      <Button
-        data-dashboard-url={target.dashboardUrl}
-        data-field={target.field}
-        data-value={target.value}
-        data-testid={testIds.logDetails.monitorPod}
-        icon="apps"
-        onClick={open}
-        size="sm"
-        variant="secondary"
-      >
-        {target.title}
-      </Button>
-      {isOpen && (
+      {showTrigger ? (
+        <Button
+          data-dashboard-url={target.dashboardUrl}
+          data-field={target.field}
+          data-value={target.value}
+          data-testid={testIds.logDetails.monitorPod}
+          icon="apps"
+          onClick={open}
+          size="sm"
+          variant="secondary"
+        >
+          {target.title}
+        </Button>
+      ) : null}
+      {modalIsOpen && (
         <Modal
           aria-label={t('components.service-scene.pod-monitor-action.dashboard-title', '{{title}}: {{value}}', {
             title: target.title,

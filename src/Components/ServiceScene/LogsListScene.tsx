@@ -22,13 +22,13 @@ import { Options } from '@grafana/schema/dist/esm/raw/composable/logs/panelcfg/x
 
 import { plugin } from '../../module';
 import { ActionBarScene } from './ActionBarScene';
+import { DashboardActionsMenu } from './DashboardActionsMenu';
 import { JSONLogsScene } from './JSONLogsScene';
 import { ErrorType } from './LogsPanelError';
 import { LogsPanelScene } from './LogsPanelScene';
 import { LogsTablePanelScene } from './LogsTablePanelScene';
 import { LogsTableScene } from './LogsTableScene';
 import { LogsVolumePanel, logsVolumePanelKey } from './LogsVolume/LogsVolumePanel';
-import { PodMonitorAction } from './PodMonitorAction';
 import { ServiceScene } from './ServiceScene';
 import { IndexScene } from 'Components/IndexScene/IndexScene';
 import { DEFAULT_URL_COLUMNS, DEFAULT_URL_COLUMNS_LEVELS } from 'Components/Table/constants';
@@ -442,14 +442,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
           <panel.Component model={panel} />
         </div>
         {dashboardPortal
-          ? createPortal(
-              <div className={styles.dashboardActions}>
-                {dashboardPortal.targets.map((target) => (
-                  <PodMonitorAction key={`${target.title}:${target.dashboardUrl}`} target={target} />
-                ))}
-              </div>,
-              dashboardPortal.container
-            )
+          ? createPortal(<DashboardActionsMenu targets={dashboardPortal.targets} />, dashboardPortal.container)
           : null}
       </>
     );
@@ -851,11 +844,6 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
 }
 
 const styles = {
-  dashboardActions: css({
-    display: 'inline-flex',
-    gap: 4,
-    marginRight: 4,
-  }),
   panelWrapper: css({
     // Hack to select internal div
     'section > div[class$="panel-content"]': css({

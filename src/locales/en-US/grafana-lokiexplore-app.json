@@ -563,6 +563,9 @@
           "copy-link": "Copy link to log line"
         }
       },
+      "dashboard-actions-menu": {
+        "label": "Dashboards"
+      },
       "json-panel": {
         "json-filter-buttons": {
           "field-value": {
