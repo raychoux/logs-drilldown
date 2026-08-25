@@ -1,0 +1,89 @@
+# Builds and attaches the distributable plugin archive to the draft release
+# created by Release Please. Forks that push tags manually get a draft release
+# automatically. The tag must match package.json, with an optional -kone suffix.
+name: Publish GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    name: Build and publish release assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Verify release tag matches package version
+        run: |
+          package_version=$(node -p "require('./package.json').version")
+          base_tag="v${package_version}"
+          if [[ "${GITHUB_REF_NAME}" != "${base_tag}" && "${GITHUB_REF_NAME}" != "${base_tag}-kone" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} must be ${base_tag} or ${base_tag}-kone." >&2
+            exit 1
+          fi
+
+      - name: Build, sign, and package plugin
+        id: package
+        uses: grafana/plugin-actions/package-plugin@2ecc2ba7168309f04010b5b637530b877d67e4ff # main
+        with:
+          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          node-version: '24'
+
+      - name: Verify tag matches plugin version
+        env:
+          PLUGIN_VERSION: ${{ steps.package.outputs.plugin-version }}
+        run: |
+          base_tag="v${PLUGIN_VERSION}"
+          if [[ "${GITHUB_REF_NAME}" != "${base_tag}" && "${GITHUB_REF_NAME}" != "${base_tag}-kone" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} must be ${base_tag} or ${base_tag}-kone." >&2
+            exit 1
+          fi
+
+      - name: Attest plugin archive
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: ${{ steps.package.outputs.archive }}
+
+      - name: Attach assets to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_ARCHIVE: ${{ steps.package.outputs.archive }}
+          PLUGIN_ARCHIVE_SHA1: ${{ steps.package.outputs.archive-sha1sum }}
+        run: |
+          upload_assets() {
+            gh release upload "${GITHUB_REF_NAME}" \
+              "${PLUGIN_ARCHIVE}" \
+              "${PLUGIN_ARCHIVE_SHA1}" \
+              --clobber
+          }
+
+          for attempt in {1..12}; do
+            if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+              upload_assets
+              exit 0
+            fi
+
+            echo "Waiting for Release Please to create ${GITHUB_REF_NAME} (attempt ${attempt}/12)..."
+            sleep 5
+          done
+
+          echo "No existing release found; creating draft ${GITHUB_REF_NAME} for this fork."
+          if ! gh release create "${GITHUB_REF_NAME}" \
+            --draft \
+            --verify-tag \
+            --generate-notes \
+            --title "${GITHUB_REF_NAME}"; then
+            # A concurrent release creator may have won the race.
+            gh release view "${GITHUB_REF_NAME}" >/dev/null
+          fi
+
+          upload_assets
