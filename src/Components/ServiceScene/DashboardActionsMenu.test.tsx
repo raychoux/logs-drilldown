@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { DashboardActionsMenu } from './DashboardActionsMenu';
@@ -54,5 +54,16 @@ describe('DashboardActionsMenu', () => {
     await user.click(screen.getByText('Pod diagnostics'));
 
     expect(screen.getByTestId('selected-dashboard')).toHaveTextContent('Pod diagnostics');
+  });
+
+  it('renders the menu inside a supplied portal root', async () => {
+    const user = userEvent.setup();
+    const portalRoot = document.createElement('div');
+    document.body.appendChild(portalRoot);
+    render(<DashboardActionsMenu portalRoot={portalRoot} targets={targets} />);
+
+    await user.click(screen.getByTestId(testIds.logDetails.dashboardMenuButton));
+
+    expect(within(portalRoot).getByTestId(testIds.logDetails.dashboardMenu)).toBeVisible();
   });
 });

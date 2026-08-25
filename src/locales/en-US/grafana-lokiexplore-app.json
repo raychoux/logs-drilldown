@@ -652,6 +652,10 @@
         "aria-label": "Open log details",
         "tooltip": "Open log details"
       },
+      "log-details-fullscreen-button": {
+        "enter": "Enter fullscreen",
+        "exit": "Exit fullscreen"
+      },
       "log-list-controls": {
         "collapse": "Collapse",
         "expand": "Expand",

@@ -1,3 +1,4 @@
+// cspell:ignore sidemenu
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { css } from '@emotion/css';
@@ -19,11 +20,13 @@ import {
   SceneTimeRangeLike,
 } from '@grafana/scenes';
 import { Options } from '@grafana/schema/dist/esm/raw/composable/logs/panelcfg/x/LogsPanelCfg_types.gen';
+import { useTheme2 } from '@grafana/ui';
 
 import { plugin } from '../../module';
 import { ActionBarScene } from './ActionBarScene';
 import { DashboardActionsMenu } from './DashboardActionsMenu';
 import { JSONLogsScene } from './JSONLogsScene';
+import { LogDetailsFullscreenButton } from './LogDetailsFullscreenButton';
 import { ErrorType } from './LogsPanelError';
 import { LogsPanelScene } from './LogsPanelScene';
 import { LogsTablePanelScene } from './LogsTablePanelScene';
@@ -205,11 +208,15 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
   public static Component = ({ model }: SceneComponentProps<LogsListScene>) => {
     const { panel } = model.useState();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const fullscreenToggleRef = useRef<() => void>(() => undefined);
+    const [isDetailsFullscreen, setIsDetailsFullscreen] = useState(false);
     const [dashboardPortal, setDashboardPortal] = useState<{
       container: HTMLSpanElement;
+      portalRoot?: HTMLElement;
       targets: DashboardTarget[];
     }>();
     const height = useChromeHeaderHeight();
+    const theme = useTheme2();
 
     useEffect(() => {
       if (height) {
@@ -241,12 +248,24 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       let selectedLogText: string | undefined;
       let dashboardActionsContainer: HTMLSpanElement | undefined;
       let renderedDashboardTargetsKey: string | undefined;
+      let renderedDashboardFullscreen: boolean | undefined;
+      let detailsFullscreen = false;
+      let originalBodyOverflow: string | undefined;
+
+      const restoreBodyOverflow = () => {
+        if (originalBodyOverflow === undefined) {
+          return;
+        }
+        ownerDocument.body.style.overflow = originalBodyOverflow;
+        originalBodyOverflow = undefined;
+      };
 
       const removeDashboardActions = () => {
         setDashboardPortal(undefined);
         dashboardActionsContainer?.remove();
         dashboardActionsContainer = undefined;
         renderedDashboardTargetsKey = undefined;
+        renderedDashboardFullscreen = undefined;
       };
 
       const applyOriginalPaneStyle = () => {
@@ -301,11 +320,33 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
 
       const sizeInlinePane = (pane: HTMLElement) => {
         preparePaneStyle(pane);
+        const panelWidth = pane.closest('section')?.getBoundingClientRect().width;
+        const inlineWidth = panelWidth ? `${panelWidth / 2}px` : nativeLogDetailsInlineWidth;
         Object.assign(pane.style, {
+          boxSizing: 'border-box',
+          flex: `0 0 ${inlineWidth}`,
           marginLeft: 'auto',
-          maxWidth: nativeLogDetailsInlineWidth,
-          minWidth: nativeLogDetailsInlineWidth,
-          width: nativeLogDetailsInlineWidth,
+          maxWidth: inlineWidth,
+          minWidth: inlineWidth,
+          width: inlineWidth,
+        });
+      };
+
+      const sizeFullscreenPane = (pane: HTMLElement) => {
+        preparePaneStyle(pane);
+        Object.assign(pane.style, {
+          bottom: '0',
+          height: '100vh',
+          left: '0',
+          marginLeft: '0',
+          maxHeight: 'none',
+          maxWidth: 'none',
+          minWidth: '0',
+          position: 'fixed',
+          right: '0',
+          top: '0',
+          width: '100vw',
+          zIndex: `${theme.zIndex.sidemenu + 1}`,
         });
       };
 
@@ -325,7 +366,7 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         const closeButton = pane.querySelector<HTMLButtonElement>(nativeLogDetailsCloseSelector);
         const buttonGroup = closeButton?.parentElement;
         const toolbar = buttonGroup?.parentElement;
-        if (targets.length === 0 || !buttonGroup || !toolbar) {
+        if (!buttonGroup || !toolbar) {
           removeDashboardActions();
           return;
         }
@@ -333,15 +374,24 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         if (!dashboardActionsContainer || dashboardActionsContainer.parentElement !== toolbar) {
           removeDashboardActions();
           dashboardActionsContainer = ownerDocument.createElement('span');
+          Object.assign(dashboardActionsContainer.style, {
+            alignItems: 'center',
+            display: 'inline-flex',
+          });
           toolbar.insertBefore(dashboardActionsContainer, buttonGroup);
         }
         const targetsKey = targets.map((target) => `${target.title}:${target.dashboardUrl}`).join('|');
-        if (renderedDashboardTargetsKey === targetsKey) {
+        if (renderedDashboardTargetsKey === targetsKey && renderedDashboardFullscreen === detailsFullscreen) {
           return;
         }
 
         renderedDashboardTargetsKey = targetsKey;
-        setDashboardPortal({ container: dashboardActionsContainer, targets });
+        renderedDashboardFullscreen = detailsFullscreen;
+        setDashboardPortal({
+          container: dashboardActionsContainer,
+          portalRoot: detailsFullscreen ? pane : undefined,
+          targets,
+        });
       };
 
       const updateDetailsPane = () => {
@@ -349,6 +399,11 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         if (!pane) {
           removeDashboardActions();
           restorePaneStyle();
+          if (detailsFullscreen) {
+            detailsFullscreen = false;
+            setIsDetailsFullscreen(false);
+            restoreBodyOverflow();
+          }
           if (resetAnchorTimer === undefined) {
             resetAnchorTimer = setTimeout(() => {
               anchoredCurrentPane = false;
@@ -361,6 +416,12 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
         if (resetAnchorTimer !== undefined) {
           clearTimeout(resetAnchorTimer);
           resetAnchorTimer = undefined;
+        }
+
+        if (detailsFullscreen) {
+          sizeFullscreenPane(pane);
+          updateDashboardActions(pane);
+          return;
         }
 
         const anchorButton = pane.querySelector<HTMLButtonElement>(nativeLogDetailsAnchorSelector);
@@ -379,6 +440,34 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
           restorePaneStyle();
         }
         updateDashboardActions(pane);
+      };
+
+      const setDetailsFullscreenState = (fullscreen: boolean) => {
+        if (detailsFullscreen === fullscreen) {
+          return;
+        }
+        detailsFullscreen = fullscreen;
+        setIsDetailsFullscreen(fullscreen);
+        if (fullscreen) {
+          originalBodyOverflow = ownerDocument.body.style.overflow;
+          ownerDocument.body.style.overflow = 'hidden';
+        } else {
+          restoreBodyOverflow();
+        }
+        updateDetailsPane();
+      };
+
+      fullscreenToggleRef.current = () => setDetailsFullscreenState(!detailsFullscreen);
+
+      const handleFullscreenKeyEvent = (event: KeyboardEvent) => {
+        if (event.key !== 'Escape' || !detailsFullscreen) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type === 'keyup') {
+          setDetailsFullscreenState(false);
+        }
       };
 
       const updateNativeOverlays = () => {
@@ -406,6 +495,8 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       // Default each newly opened context dialog to unwrapped and each details pane to Grafana's right anchor.
       const observer = new MutationObserver(updateNativeOverlays);
       root.addEventListener('click', handleLogRowClick, true);
+      ownerDocument.defaultView?.addEventListener('keydown', handleFullscreenKeyEvent, true);
+      ownerDocument.defaultView?.addEventListener('keyup', handleFullscreenKeyEvent, true);
       observer.observe(ownerDocument.body, { childList: true, subtree: true });
       ownerDocument.defaultView?.addEventListener('resize', updateDetailsPane);
       updateNativeOverlays();
@@ -413,14 +504,18 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
       return () => {
         observer.disconnect();
         root.removeEventListener('click', handleLogRowClick, true);
+        ownerDocument.defaultView?.removeEventListener('keydown', handleFullscreenKeyEvent, true);
+        ownerDocument.defaultView?.removeEventListener('keyup', handleFullscreenKeyEvent, true);
         ownerDocument.defaultView?.removeEventListener('resize', updateDetailsPane);
         if (resetAnchorTimer !== undefined) {
           clearTimeout(resetAnchorTimer);
         }
+        fullscreenToggleRef.current = () => undefined;
         removeDashboardActions();
+        restoreBodyOverflow();
         restorePaneStyle();
       };
-    }, [model, panel]);
+    }, [model, panel, theme.zIndex.sidemenu]);
 
     useResizeObserver({
       onResize: () => {
@@ -442,7 +537,18 @@ export class LogsListScene extends SceneObjectBase<LogsListSceneState> {
           <panel.Component model={panel} />
         </div>
         {dashboardPortal
-          ? createPortal(<DashboardActionsMenu targets={dashboardPortal.targets} />, dashboardPortal.container)
+          ? createPortal(
+              <>
+                {dashboardPortal.targets.length > 0 ? (
+                  <DashboardActionsMenu portalRoot={dashboardPortal.portalRoot} targets={dashboardPortal.targets} />
+                ) : null}
+                <LogDetailsFullscreenButton
+                  isFullscreen={isDetailsFullscreen}
+                  onToggle={() => fullscreenToggleRef.current()}
+                />
+              </>,
+              dashboardPortal.container
+            )
           : null}
       </>
     );

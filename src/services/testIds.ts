@@ -84,6 +84,7 @@ export const testIds = {
     dashboardMenu: 'data-testid log-details-dashboard-menu',
     dashboardMenuButton: 'data-testid log-details-dashboard-menu-button',
     dashboardMenuItem: 'data-testid log-details-dashboard-menu-item',
+    fullscreenToggle: 'data-testid log-details-fullscreen-toggle',
     monitorPod: 'data-testid log-details-monitor-pod',
     monitorPodDialog: 'data-testid log-details-monitor-pod-dialog',
     monitorPodDashboard: 'data-testid log-details-monitor-pod-dashboard',

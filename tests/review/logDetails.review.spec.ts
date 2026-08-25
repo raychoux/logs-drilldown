@@ -54,6 +54,55 @@ test('captures the custom dialog from native Logs and Table renderers', async ({
   await expect(nativeDetailsSearch).toBeVisible();
   await capture(page, testInfo, 'log-details-native-anchored');
 
+  const dashboardMenuButton = page.getByTestId(testIds.logDetails.dashboardMenuButton);
+  const fullscreenToggle = page.getByTestId(testIds.logDetails.fullscreenToggle);
+  await expect(dashboardMenuButton).toBeVisible();
+  await expect(fullscreenToggle).toBeVisible();
+  const dashboardButtonBox = await dashboardMenuButton.boundingBox();
+  const fullscreenButtonBox = await fullscreenToggle.boundingBox();
+  expect(dashboardButtonBox).not.toBeNull();
+  expect(fullscreenButtonBox).not.toBeNull();
+  expect(Math.abs((dashboardButtonBox?.y ?? 0) - (fullscreenButtonBox?.y ?? 0))).toBeLessThanOrEqual(2);
+  await expect(fullscreenToggle).toHaveAttribute('aria-label', 'Enter fullscreen');
+  await fullscreenToggle.click();
+  await expect(fullscreenToggle).toHaveAttribute('aria-label', 'Exit fullscreen');
+
+  const fullscreenDetailsBox = await nativeDetailsPane.boundingBox();
+  expect(fullscreenDetailsBox).not.toBeNull();
+  expect(fullscreenDetailsBox?.x).toBeLessThanOrEqual(1);
+  expect(fullscreenDetailsBox?.y).toBeLessThanOrEqual(1);
+  expect(fullscreenDetailsBox?.width).toBeGreaterThanOrEqual((viewport?.width ?? 0) - 2);
+  expect(fullscreenDetailsBox?.height).toBeGreaterThanOrEqual((viewport?.height ?? 0) - 2);
+  await capture(page, testInfo, 'log-details-native-fullscreen');
+
+  await dashboardMenuButton.click();
+  const fullscreenDashboardMenu = page.getByTestId(testIds.logDetails.dashboardMenu);
+  const fullscreenDashboardItem = page.getByTestId(testIds.logDetails.dashboardMenuItem).first();
+  await expect(fullscreenDashboardMenu).toBeVisible();
+  await expect(fullscreenDashboardItem).toBeVisible();
+  await capture(page, testInfo, 'log-details-native-fullscreen-dashboard-menu');
+  await fullscreenDashboardItem.click();
+  const fullscreenDashboardDialog = page.getByTestId(testIds.logDetails.monitorPodDialog);
+  await expect(fullscreenDashboardDialog).toBeVisible();
+  await fullscreenDashboardDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(fullscreenDashboardDialog).toBeHidden();
+
+  await page.keyboard.press('Escape');
+  await expect(fullscreenToggle).toHaveAttribute('aria-label', 'Enter fullscreen');
+  const restoredAnchoredBox = await nativeDetailsPane.boundingBox();
+  expect(restoredAnchoredBox?.x).toBeGreaterThan((viewport?.width ?? 0) * 0.6);
+  expect(restoredAnchoredBox?.width).toBeLessThan((viewport?.width ?? 0) * 0.4);
+  expect(restoredAnchoredBox?.y).toBeGreaterThanOrEqual(68);
+  expect(restoredAnchoredBox?.y).toBeLessThanOrEqual(76);
+
+  await fullscreenToggle.click();
+  await expect(fullscreenToggle).toHaveAttribute('aria-label', 'Exit fullscreen');
+  await fullscreenToggle.click();
+  await expect(fullscreenToggle).toHaveAttribute('aria-label', 'Enter fullscreen');
+  const buttonRestoredAnchoredBox = await nativeDetailsPane.boundingBox();
+  expect(buttonRestoredAnchoredBox?.x).toBeGreaterThan((viewport?.width ?? 0) * 0.6);
+  expect(buttonRestoredAnchoredBox?.width).toBeLessThan((viewport?.width ?? 0) * 0.4);
+
   await page.getByLabel('Display inline').click();
   const visibleAnchorButton = page.locator('button[aria-label="Anchor to the right"]:visible').first();
   await expect(visibleAnchorButton).toBeVisible();

@@ -8,10 +8,11 @@ import { DashboardTarget } from 'services/dashboardRules';
 import { testIds } from 'services/testIds';
 
 interface Props {
+  portalRoot?: HTMLElement;
   targets: DashboardTarget[];
 }
 
-export function DashboardActionsMenu({ targets }: Props) {
+export function DashboardActionsMenu({ portalRoot, targets }: Props) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<DashboardTarget>();
   const label = t('components.service-scene.dashboard-actions-menu.label', 'Dashboards');
@@ -35,7 +36,7 @@ export function DashboardActionsMenu({ targets }: Props) {
 
   return (
     <>
-      <Dropdown onVisibleChange={setIsMenuOpen} overlay={menu} placement="bottom-end">
+      <Dropdown onVisibleChange={setIsMenuOpen} overlay={menu} placement="bottom-end" root={portalRoot}>
         <ToolbarButton
           aria-label={label}
           data-testid={testIds.logDetails.dashboardMenuButton}
