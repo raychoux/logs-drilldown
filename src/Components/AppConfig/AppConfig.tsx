@@ -318,7 +318,7 @@ const AppConfig = ({ plugin }: Props) => {
             className={styles.marginTop}
             description={t(
               'components.app-config.dashboard-rules-description',
-              'Ordered JSON rules that match indexed labels or structured metadata to Grafana dashboards. URL templates support {{value}}, {{field}}, {{logQuery}}, {{datasource}}, and {{fields.<name>}}.'
+              'Ordered JSON rules that match indexed labels or structured metadata to Grafana dashboards. Use requiredFields to require every named field from the configured source. Use valueTransform to extract or rewrite a matched value before rendering {{value}}. URL templates support {{value}}, {{rawValue}}, {{field}}, {{logQuery}}, {{datasource}}, and {{fields.<name>}}.'
             )}
             error={dashboardRulesError}
             invalid={dashboardRulesError !== undefined}

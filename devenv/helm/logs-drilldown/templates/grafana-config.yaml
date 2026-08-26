@@ -71,11 +71,21 @@ data:
             - title: Pod overview
               field: pod
               fieldMatch: contains
+              requiredFields:
+                - container
+                - namespace
+                - pod
+                - cluster
               source: indexed-or-structured
               dashboardUrl: /d/{{ .Values.grafana.dashboardUid }}/{{ .Values.grafana.dashboardSlug }}?view=overview&var-pod={{`{{value}}`}}&var-pod_query={{`{{logQuery}}`}}&var-namespace={{`{{fields.namespace}}`}}&var-cluster={{`{{fields.cluster}}`}}&var-ds={{`{{datasource}}`}}
             - title: Pod diagnostics
               field: pod
               fieldMatch: contains
+              requiredFields:
+                - container
+                - namespace
+                - pod
+                - cluster
               source: indexed-or-structured
               dashboardUrl: /d/{{ .Values.grafana.dashboardUid }}/{{ .Values.grafana.dashboardSlug }}?view=diagnostics&var-pod={{`{{value}}`}}&var-pod_query={{`{{logQuery}}`}}&var-namespace={{`{{fields.namespace}}`}}&var-cluster={{`{{fields.cluster}}`}}&var-ds={{`{{datasource}}`}}
         secureJsonData:

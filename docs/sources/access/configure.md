@@ -17,6 +17,8 @@ title: Configure Grafana Logs Drilldown
 weight: 200
 ---
 
+<!-- cspell:words dvplat cfggs ajuoa -->
+
 # Configure Grafana Logs Drilldown
 
 You can use the Configuration page to configure the Grafana Logs Drilldown app like other apps or plugins in Grafana.
@@ -74,11 +76,12 @@ Select a setting to configure it:
   ```json
   [
     {
-      "title": "Pod overview",
-      "field": "pod",
-      "fieldMatch": "contains",
-      "source": "indexed-or-structured",
-      "dashboardUrl": "/d/pod-overview/pods?var-pod={{value}}&var-namespace={{fields.namespace}}"
+      "title": "Kubernetes resource usage",
+      "field": "pod_name",
+      "fieldMatch": "exact",
+      "requiredFields": ["container_name", "namespace", "pod_name", "cluster"],
+      "source": "structured",
+      "dashboardUrl": "/d/common-k8s-resources/kubernetes-resource-usage-tf?orgId=3&from=now-1h&to=now&timezone=browser&var-cluster={{fields.cluster}}&var-namespace={{fields.namespace}}&var-pod={{fields.pod_name}}&var-container={{fields.container_name}}&refresh=30s"
     },
     {
       "title": "Service dashboard",
@@ -86,11 +89,26 @@ Select a setting to configure it:
       "fieldMatch": "exact",
       "source": "indexed",
       "dashboardUrl": "/d/service-overview/services?var-service={{value}}"
+    },
+    {
+      "title": "Node Exporter",
+      "field": "node_name",
+      "fieldMatch": "exact",
+      "source": "structured",
+      "valueTransform": {
+        "regex": "^[^.]+\\.(\\d{1,3}(?:\\.\\d{1,3}){3})$",
+        "replacement": "$1"
+      },
+      "dashboardUrl": "/d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster=dvplat&var-instance={{value}}:9100&refresh=30s"
     }
   ]
   ```
 
-  Dashboard URLs must point to a dashboard on the same Grafana instance using a `/d/<uid>/<slug>` route. URL templates support `{{value}}`, `{{field}}`, `{{logQuery}}`, `{{datasource}}`, `{{from}}`, `{{to}}`, `{{timezone}}`, and `{{fields.<name>}}`. Parameters with unavailable field placeholders are omitted. The current `from`, `to`, and `timezone` are added when the URL does not set them. Save an empty array to disable dashboard actions.
+  `requiredFields` is optional. When present, every named field must have a non-empty value from the rule's configured `source` before the dashboard action is shown. In the Kubernetes example, all four fields must therefore be structured metadata; indexed or parsed fields with the same names do not satisfy the rule.
+
+  `valueTransform` is optional. Its `regex` must match the raw field value, and `replacement` uses JavaScript replacement syntax such as `$1`. A non-match or empty result suppresses the dashboard action. In the Node Exporter example, `cn-shanghai.10.131.116.71` becomes `10.131.116.71`, so `{{value}}:9100` renders as `10.131.116.71:9100`. The unmodified value remains available as `{{rawValue}}` and `{{fields.node_name}}`.
+
+  Dashboard URLs must point to a dashboard on the same Grafana instance using a `/d/<uid>/<slug>` route. URL templates support `{{value}}`, `{{rawValue}}`, `{{field}}`, `{{logQuery}}`, `{{datasource}}`, `{{from}}`, `{{to}}`, `{{timezone}}`, and `{{fields.<name>}}`. Parameters with unavailable field placeholders are omitted. The current `from`, `to`, and `timezone` are added when the URL does not set them. Save an empty array to disable dashboard actions.
 
 After configuring a setting, click **Save settings** to apply the changes.
 

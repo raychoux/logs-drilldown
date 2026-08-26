@@ -7,13 +7,20 @@ import { getLabelTypeFromFrame } from './lokiQuery';
 export type DashboardFieldMatch = 'contains' | 'exact' | 'regex';
 export type DashboardFieldSource = 'indexed' | 'indexed-or-structured' | 'structured';
 
+export interface DashboardValueTransform {
+  regex: string;
+  replacement: string;
+}
+
 export interface DashboardRule {
   dashboardUrl: string;
   field: string;
   fieldMatch: DashboardFieldMatch;
+  requiredFields?: string[];
   source: DashboardFieldSource;
   title: string;
   valueRegex?: string;
+  valueTransform?: DashboardValueTransform;
 }
 
 export interface DashboardTarget {
@@ -44,6 +51,7 @@ interface DashboardTemplateContext {
   fields: Map<string, string>;
   from: string;
   logQuery: string;
+  rawValue: string;
   timezone: string;
   to: string;
   value: string;
@@ -98,8 +106,15 @@ export function getDashboardTargets(
   for (const rule of rules) {
     for (const row of rows) {
       const values = getTypedRowValues(row);
+      if (!hasRequiredFields(values, rule)) {
+        continue;
+      }
       const match = values.find((value) => matchesRule(value, rule));
       if (!match) {
+        continue;
+      }
+      const transformedValue = transformValue(match.value, rule.valueTransform);
+      if (transformedValue === undefined) {
         continue;
       }
 
@@ -110,9 +125,10 @@ export function getDashboardTargets(
         fields: new Map(values.map((value) => [value.key.toLowerCase(), value.value])),
         from,
         logQuery,
+        rawValue: match.value,
         timezone,
         to,
-        value: match.value,
+        value: transformedValue,
       };
       const dashboardUrl = renderDashboardUrl(rule.dashboardUrl, context, sourceParams, appSubUrl);
       targets.push({
@@ -123,7 +139,7 @@ export function getDashboardTargets(
         logQuery,
         title: renderTemplate(rule.title, context) ?? rule.title,
         to,
-        value: match.value,
+        value: transformedValue,
       });
       break;
     }
@@ -141,8 +157,10 @@ function parseDashboardRule(value: unknown, index: number): DashboardRule {
   const field = requiredString(value.field, index, 'field');
   const dashboardUrl = requiredString(value.dashboardUrl, index, 'dashboardUrl');
   const fieldMatch = value.fieldMatch ?? 'exact';
+  const requiredFields = parseRequiredFields(value.requiredFields, index);
   const source = value.source ?? 'indexed-or-structured';
   const valueRegex = value.valueRegex;
+  const valueTransform = parseValueTransform(value.valueTransform, index);
 
   if (!['contains', 'exact', 'regex'].includes(String(fieldMatch))) {
     throw new Error(`Dashboard rule ${index + 1} has an invalid fieldMatch.`);
@@ -160,6 +178,9 @@ function parseDashboardRule(value: unknown, index: number): DashboardRule {
     }
     if (valueRegex) {
       new RegExp(valueRegex);
+    }
+    if (valueTransform) {
+      new RegExp(valueTransform.regex);
     }
   } catch {
     throw new Error(`Dashboard rule ${index + 1} contains an invalid regular expression.`);
@@ -180,9 +201,11 @@ function parseDashboardRule(value: unknown, index: number): DashboardRule {
     dashboardUrl,
     field,
     fieldMatch: fieldMatch as DashboardFieldMatch,
+    ...(requiredFields ? { requiredFields } : {}),
     source: source as DashboardFieldSource,
     title,
     ...(valueRegex ? { valueRegex } : {}),
+    ...(valueTransform ? { valueTransform } : {}),
   };
 }
 
@@ -195,6 +218,43 @@ function requiredString(value: unknown, index: number, field: string): string {
     throw new Error(`Dashboard rule ${index + 1} ${field} is required.`);
   }
   return value.trim();
+}
+
+function parseRequiredFields(value: unknown, index: number): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Dashboard rule ${index + 1} requiredFields must be a non-empty string array.`);
+  }
+
+  const fields = value.map((field) => {
+    if (typeof field !== 'string' || !field.trim()) {
+      throw new Error(`Dashboard rule ${index + 1} requiredFields must contain non-empty strings.`);
+    }
+    return field.trim();
+  });
+  return Array.from(new Set(fields));
+}
+
+function parseValueTransform(value: unknown, index: number): DashboardValueTransform | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error(`Dashboard rule ${index + 1} valueTransform must be an object.`);
+  }
+  if (typeof value.regex !== 'string' || !value.regex.trim()) {
+    throw new Error(`Dashboard rule ${index + 1} valueTransform regex is required.`);
+  }
+  if (typeof value.replacement !== 'string') {
+    throw new Error(`Dashboard rule ${index + 1} valueTransform replacement must be a string.`);
+  }
+
+  return {
+    regex: value.regex.trim(),
+    replacement: value.replacement,
+  };
 }
 
 function normalizeLogText(value: string): string {
@@ -244,11 +304,28 @@ function getTypedRowValues(row: DataFrameRow): TypedRowValue[] {
   return values;
 }
 
-function matchesRule(value: TypedRowValue, rule: DashboardRule): boolean {
-  if (rule.source === 'indexed' && value.type !== LabelType.Indexed) {
-    return false;
+function hasRequiredFields(values: TypedRowValue[], rule: DashboardRule): boolean {
+  if (!rule.requiredFields) {
+    return true;
   }
-  if (rule.source === 'structured' && value.type !== LabelType.StructuredMetadata) {
+
+  return rule.requiredFields.every((requiredField) =>
+    values.some((value) => value.key.toLowerCase() === requiredField.toLowerCase() && matchesSource(value, rule.source))
+  );
+}
+
+function matchesSource(value: TypedRowValue, source: DashboardFieldSource): boolean {
+  if (source === 'indexed') {
+    return value.type === LabelType.Indexed;
+  }
+  if (source === 'structured') {
+    return value.type === LabelType.StructuredMetadata;
+  }
+  return true;
+}
+
+function matchesRule(value: TypedRowValue, rule: DashboardRule): boolean {
+  if (!matchesSource(value, rule.source)) {
     return false;
   }
 
@@ -261,6 +338,20 @@ function matchesRule(value: TypedRowValue, rule: DashboardRule): boolean {
         ? key.includes(configuredField)
         : new RegExp(rule.field, 'i').test(value.key);
   return fieldMatches && (!rule.valueRegex || new RegExp(rule.valueRegex).test(value.value));
+}
+
+function transformValue(value: string, transform?: DashboardValueTransform): string | undefined {
+  if (!transform) {
+    return value;
+  }
+
+  const regex = new RegExp(transform.regex);
+  if (!regex.test(value)) {
+    return undefined;
+  }
+
+  const transformedValue = value.replace(regex, transform.replacement).trim();
+  return transformedValue || undefined;
 }
 
 function toLogQLIdentifier(key: string): string {
@@ -341,6 +432,7 @@ function resolveTemplateToken(token: string, context: DashboardTemplateContext):
     field: context.field,
     from: context.from,
     logQuery: context.logQuery,
+    rawValue: context.rawValue,
     timezone: context.timezone,
     to: context.to,
     value: context.value,
