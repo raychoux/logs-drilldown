@@ -127,9 +127,10 @@ describe('getDashboardTargets', () => {
   it('extracts a node IP from structured metadata for the Node Exporter dashboard', () => {
     const nodeExporterRule: DashboardRule = {
       dashboardUrl:
-        '/d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster=dvplat&var-instance={{value}}:9100&refresh=30s',
+        '/d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster={{fields.cluster}}&var-instance={{value}}:9100&refresh=30s',
       field: 'node_name',
       fieldMatch: 'exact',
+      requiredFields: ['cluster'],
       source: 'structured',
       title: 'Node Exporter',
       valueTransform: {
@@ -138,8 +139,8 @@ describe('getDashboardTargets', () => {
       },
     };
     const frame = createLogsFrame(
-      { node_name: 'S', service_name: 'I' },
-      { node_name: 'cn-shanghai.10.131.116.71', service_name: 'node-exporter' }
+      { node_name: 'S', service_name: 'I', cluster: 'C' },
+      { node_name: 'cn-shanghai.10.131.116.71', service_name: 'node-exporter', cluster: 'dvplat' }
     );
 
     const [target] = getDashboardTargets([frame], 0, [nodeExporterRule]);
@@ -163,11 +164,20 @@ describe('getDashboardTargets', () => {
       refresh: '30s',
     });
 
-    const malformedNodeFrame = createLogsFrame({ node_name: 'S' }, { node_name: 'cn-shanghai.node-a' });
-    const indexedNodeFrame = createLogsFrame({ node_name: 'I' }, { node_name: 'cn-shanghai.10.131.116.71' });
+    const malformedNodeFrame = createLogsFrame(
+      { node_name: 'S' },
+      { node_name: 'cn-shanghai.node-a', cluster: 'dvplat' }
+    );
+    const indexedNodeFrame = createLogsFrame(
+      { node_name: 'I' },
+      { node_name: 'cn-shanghai.10.131.116.71', cluster: 'dvplat' }
+    );
 
     expect(getDashboardTargets([malformedNodeFrame], 0, [nodeExporterRule])).toEqual([]);
     expect(getDashboardTargets([indexedNodeFrame], 0, [nodeExporterRule])).toEqual([]);
+
+    const missingClusterFrame = createLogsFrame({ node_name: 'S' }, { node_name: 'cn-shanghai.10.131.116.71' });
+    expect(getDashboardTargets([missingClusterFrame], 0, [nodeExporterRule])).toEqual([]);
   });
 
   it('honors field matching, source selection, and value regex', () => {

@@ -94,12 +94,13 @@ Select a setting to configure it:
       "title": "Node Exporter",
       "field": "node_name",
       "fieldMatch": "exact",
+      "requiredFields": ["cluster"],
       "source": "structured",
       "valueTransform": {
         "regex": "^[^.]+\\.(\\d{1,3}(?:\\.\\d{1,3}){3})$",
         "replacement": "$1"
       },
-      "dashboardUrl": "/d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster=dvplat&var-instance={{value}}:9100&refresh=30s"
+      "dashboardUrl": "/d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster={{fields.cluster}}&var-instance={{value}}:9100&refresh=30s"
     }
   ]
   ```
