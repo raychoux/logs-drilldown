@@ -1,6 +1,7 @@
 # Builds and attaches the distributable plugin archive to the draft release
 # created by Release Please. Forks that push tags manually get a draft release
-# automatically. The tag must match package.json, with an optional -kone suffix.
+# automatically. The tag must match package.json, with an optional -kone suffix
+# and optional numeric revision (for example, v2.5.1-kone.1).
 name: Publish GitHub Release
 
 on:
@@ -26,25 +27,65 @@ jobs:
         run: |
           package_version=$(node -p "require('./package.json').version")
           base_tag="v${package_version}"
-          if [[ "${GITHUB_REF_NAME}" != "${base_tag}" && "${GITHUB_REF_NAME}" != "${base_tag}-kone" ]]; then
-            echo "Tag ${GITHUB_REF_NAME} must be ${base_tag} or ${base_tag}-kone." >&2
+          kone_tag_pattern="^v${package_version//./\\.}-kone(\\.[1-9][0-9]*)?$"
+          if [[ "${GITHUB_REF_NAME}" != "${base_tag}" && ! "${GITHUB_REF_NAME}" =~ ${kone_tag_pattern} ]]; then
+            echo "Tag ${GITHUB_REF_NAME} must be ${base_tag}, ${base_tag}-kone, or ${base_tag}-kone.<revision>." >&2
             exit 1
           fi
 
-      - name: Build, sign, and package plugin
-        id: package
-        uses: grafana/plugin-actions/package-plugin@2ecc2ba7168309f04010b5b637530b877d67e4ff # main
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
           node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build plugin
+        run: pnpm run build
+
+      # This fork distributes a customized build of an existing public plugin.
+      # Grafana's catalog validator rejects the upstream version even though the
+      # archive is intended only for this fork's GitHub Release.
+      - name: Sign plugin when token is configured
+        env:
+          GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+        run: |
+          if [[ -n "${GRAFANA_ACCESS_POLICY_TOKEN}" ]]; then
+            pnpm run sign
+          else
+            echo "::warning::GRAFANA_ACCESS_POLICY_TOKEN is not configured; packaging an unsigned plugin."
+          fi
+
+      - name: Package plugin
+        id: package
+        run: |
+          plugin_id=$(node -p "require('./dist/plugin.json').id")
+          plugin_version=$(node -p "require('./dist/plugin.json').info.version")
+          archive="${plugin_id}-${plugin_version}.zip"
+          checksum="${archive}.sha1"
+
+          mv dist "${plugin_id}"
+          zip -r "${archive}" "${plugin_id}"
+          sha1sum "${archive}" | cut -d' ' -f1 > "${checksum}"
+
+          echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
+          echo "archive-sha1sum=${checksum}" >> "${GITHUB_OUTPUT}"
+          echo "plugin-id=${plugin_id}" >> "${GITHUB_OUTPUT}"
+          echo "plugin-version=${plugin_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Verify tag matches plugin version
         env:
           PLUGIN_VERSION: ${{ steps.package.outputs.plugin-version }}
         run: |
           base_tag="v${PLUGIN_VERSION}"
-          if [[ "${GITHUB_REF_NAME}" != "${base_tag}" && "${GITHUB_REF_NAME}" != "${base_tag}-kone" ]]; then
-            echo "Tag ${GITHUB_REF_NAME} must be ${base_tag} or ${base_tag}-kone." >&2
+          kone_tag_pattern="^v${PLUGIN_VERSION//./\\.}-kone(\\.[1-9][0-9]*)?$"
+          if [[ "${GITHUB_REF_NAME}" != "${base_tag}" && ! "${GITHUB_REF_NAME}" =~ ${kone_tag_pattern} ]]; then
+            echo "Tag ${GITHUB_REF_NAME} must be ${base_tag}, ${base_tag}-kone, or ${base_tag}-kone.<revision>." >&2
             exit 1
           fi
 
