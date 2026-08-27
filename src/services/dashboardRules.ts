@@ -1,4 +1,5 @@
 import { DataFrame } from '@grafana/data';
+import { getDataSourceSrv } from '@grafana/runtime';
 
 import { LabelType } from './fieldsTypes';
 import { parseLogsFrame } from './logsFrame';
@@ -52,9 +53,16 @@ interface DashboardTemplateContext {
   from: string;
   logQuery: string;
   rawValue: string;
+  tempoDatasource?: string;
   timezone: string;
   to: string;
   value: string;
+}
+
+interface DerivedField {
+  datasourceUid?: unknown;
+  matcherRegex?: unknown;
+  name?: unknown;
 }
 
 export const DEFAULT_DASHBOARD_RULES: DashboardRule[] = [
@@ -101,6 +109,7 @@ export function getDashboardTargets(
   const from = sourceParams.get('from') ?? 'now-15m';
   const to = sourceParams.get('to') ?? 'now';
   const timezone = sourceParams.get('timezone') ?? 'browser';
+  const tempoDatasource = rules.some(usesTempoDatasourceTemplate) ? resolveTempoDatasource(datasourceUid) : undefined;
   const targets: DashboardTarget[] = [];
 
   for (const rule of rules) {
@@ -126,6 +135,7 @@ export function getDashboardTargets(
         from,
         logQuery,
         rawValue: match.value,
+        tempoDatasource,
         timezone,
         to,
         value: transformedValue,
@@ -255,6 +265,52 @@ function parseValueTransform(value: unknown, index: number): DashboardValueTrans
     regex: value.regex.trim(),
     replacement: value.replacement,
   };
+}
+
+function usesTempoDatasourceTemplate(rule: DashboardRule): boolean {
+  return rule.dashboardUrl.includes('{{tempoDatasource}}') || rule.title.includes('{{tempoDatasource}}');
+}
+
+function resolveTempoDatasource(lokiDatasourceUid: string): string | undefined {
+  if (!lokiDatasourceUid) {
+    return undefined;
+  }
+
+  try {
+    const settings = getDataSourceSrv().getInstanceSettings(lokiDatasourceUid);
+    const derivedFields = isRecord(settings?.jsonData) ? settings.jsonData.derivedFields : undefined;
+    if (!Array.isArray(derivedFields)) {
+      return undefined;
+    }
+
+    const mappedFields = derivedFields.filter(isDerivedField).filter((field) => getDatasourceUid(field) !== undefined);
+    const traceField = mappedFields.find((field) => {
+      const searchableValues = [field.name, field.matcherRegex].filter(
+        (value): value is string => typeof value === 'string'
+      );
+      return searchableValues.some((value) => /trace(?:[_-]?id)?/i.test(value));
+    });
+    if (traceField) {
+      return getDatasourceUid(traceField);
+    }
+
+    const datasourceUidValues = Array.from(new Set(mappedFields.map(getDatasourceUid).filter(isDefined)));
+    return datasourceUidValues.length === 1 ? datasourceUidValues[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isDerivedField(value: unknown): value is DerivedField {
+  return isRecord(value);
+}
+
+function getDatasourceUid(field: DerivedField): string | undefined {
+  return typeof field.datasourceUid === 'string' && field.datasourceUid.trim() ? field.datasourceUid.trim() : undefined;
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function normalizeLogText(value: string): string {
@@ -427,12 +483,13 @@ function resolveTemplateToken(token: string, context: DashboardTemplateContext):
   if (token.startsWith('fields.')) {
     return context.fields.get(token.slice('fields.'.length).toLowerCase());
   }
-  const values: Record<string, string> = {
+  const values: Record<string, string | undefined> = {
     datasource: context.datasource,
     field: context.field,
     from: context.from,
     logQuery: context.logQuery,
     rawValue: context.rawValue,
+    tempoDatasource: context.tempoDatasource,
     timezone: context.timezone,
     to: context.to,
     value: context.value,

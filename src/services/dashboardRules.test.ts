@@ -1,6 +1,12 @@
 import { FieldType, toDataFrame } from '@grafana/data';
+import { getDataSourceSrv } from '@grafana/runtime';
 
 import { DashboardRule, getDashboardTargets, parseDashboardRules, parseDashboardRulesText } from './dashboardRules';
+
+jest.mock('@grafana/runtime', () => ({
+  ...jest.requireActual('@grafana/runtime'),
+  getDataSourceSrv: jest.fn(),
+}));
 
 function createLogsFrame(labelTypes: Record<string, string>, labels: Record<string, string>) {
   return toDataFrame({
@@ -59,6 +65,71 @@ describe('getDashboardTargets', () => {
     expect(overviewUrl.searchParams.get('from')).toBe('now-30m');
     expect(overviewUrl.searchParams.get('to')).toBe('now');
     expect(overviewUrl.searchParams.get('timezone')).toBe('browser');
+  });
+
+  it('resolves the Tempo datasource from Loki derived fields with live Loki datasource and trace_id values', () => {
+    const traceId = '0000000000000000f2442fdaca8ce1ac';
+    const tempoDatasourceUid = 'tempo-iess-prod';
+    const lokiDatasourceUid = 'dfggsbwk3ma68b';
+    const traceRule: DashboardRule = {
+      dashboardUrl:
+        '/d/common-otel-trace-correlated-logs/otel-e28094-trace-detail-and-correlated-logs?orgId=3&from=now-30m&to=now&timezone=browser&var-ds_prometheus=cfggs9cj1ajuoa&var-ds_tempo={{tempoDatasource}}&var-ds_loki={{datasource}}&var-traceId={{value}}&refresh=30s',
+      field: 'trace_id',
+      fieldMatch: 'exact',
+      source: 'structured',
+      title: 'Trace detail and correlated logs',
+    };
+    const getInstanceSettings = jest.fn().mockReturnValue({
+      jsonData: {
+        derivedFields: [
+          {
+            datasourceUid: tempoDatasourceUid,
+            matcherRegex: 'traceID',
+            name: 'traceID-tempo',
+          },
+        ],
+      },
+      type: 'loki',
+      uid: lokiDatasourceUid,
+    });
+    jest.mocked(getDataSourceSrv).mockReturnValue({ getInstanceSettings } as any);
+    const frame = createLogsFrame(
+      { service_name: 'I', trace_id: 'S' },
+      { service_name: 'otel-collector', trace_id: traceId }
+    );
+
+    const [target] = getDashboardTargets(
+      [frame],
+      0,
+      [traceRule],
+      `?from=now-30m&to=now&timezone=browser&var-ds=${lokiDatasourceUid}`,
+      'selected log body',
+      '/grafana'
+    );
+    const dashboardUrl = new URL(target.dashboardUrl, 'http://localhost');
+
+    expect(target).toMatchObject({
+      datasourceUid: lokiDatasourceUid,
+      field: 'trace_id',
+      logQuery: `{service_name="otel-collector"} | trace_id="${traceId}"`,
+      title: 'Trace detail and correlated logs',
+      value: traceId,
+    });
+    expect(dashboardUrl.pathname).toBe(
+      '/grafana/d/common-otel-trace-correlated-logs/otel-e28094-trace-detail-and-correlated-logs'
+    );
+    expect(Object.fromEntries(dashboardUrl.searchParams)).toEqual({
+      orgId: '3',
+      from: 'now-30m',
+      to: 'now',
+      timezone: 'browser',
+      'var-ds_prometheus': 'cfggs9cj1ajuoa',
+      'var-ds_tempo': tempoDatasourceUid,
+      'var-ds_loki': lokiDatasourceUid,
+      'var-traceId': traceId,
+      refresh: '30s',
+    });
+    expect(getInstanceSettings).toHaveBeenCalledWith(lokiDatasourceUid);
   });
 
   it('requires all configured structured metadata and maps Kubernetes values to the common resource dashboard', () => {
