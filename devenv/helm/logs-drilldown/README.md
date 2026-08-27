@@ -62,6 +62,12 @@ All public repositories and tags are configurable in `values.yaml`. The two proj
 - `logs-drilldown-grafana:dev`
 - `logs-drilldown-generator:dev`
 
+Generator builds use `https://goproxy.cn,direct` by default. Override the Go module proxy for `make start` when needed, for example:
+
+```bash
+GOPROXY=https://proxy.golang.org,direct make start
+```
+
 Override public images in a restricted network with a values file or `--set`, for example:
 
 ```bash

@@ -18,6 +18,7 @@ GRAFANA_BASE_IMAGE ?= grafana/grafana
 GRAFANA_VERSION ?= 13.1.3
 GRAFANA_DEV_IMAGE ?= logs-drilldown-grafana:dev
 GENERATOR_DEV_IMAGE ?= logs-drilldown-generator:dev
+GOPROXY ?= https://goproxy.cn,direct
 NODE_MIN_MAJOR := 24
 SYNC_SCRIPT := devenv/scripts/sync-plugin.sh
 DEV_SCRIPT := devenv/scripts/dev-plugin.sh
@@ -49,7 +50,7 @@ build: ## Build one coherent production plugin bundle
 
 images: check build ## Build the two local images consumed by the chart
 	$(DOCKER) build --file "$(KUBE_CHART)/images/grafana/Dockerfile" --build-arg "GRAFANA_IMAGE=$(GRAFANA_BASE_IMAGE)" --build-arg "GRAFANA_VERSION=$(GRAFANA_VERSION)" --tag "$(GRAFANA_DEV_IMAGE)" .
-	$(DOCKER) build --tag "$(GENERATOR_DEV_IMAGE)" generator
+	$(DOCKER) build --build-arg "GOPROXY=$(GOPROXY)" --tag "$(GENERATOR_DEV_IMAGE)" generator
 
 install: images ## Install or upgrade the complete stack in Docker Desktop Kubernetes
 	@$(COMPOSE) -f "$(COMPOSE_FILE)" down --remove-orphans >/dev/null 2>&1 || true

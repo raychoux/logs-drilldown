@@ -10,5 +10,26 @@ apps:
     jsonData:
       apiUrl: http://default-url.com
       isApiKeySet: true
+      dashboardRules:
+        - title: Pod overview
+          field: pod
+          fieldMatch: contains
+          requiredFields:
+            - container
+            - namespace
+            - pod
+            - cluster
+          source: indexed-or-structured
+          dashboardUrl: /d/grafana-lokiexplore-pod-monitor/pod-monitor?view=overview&var-pod={{value}}&var-pod_query={{logQuery}}&var-namespace={{fields.namespace}}&var-cluster={{fields.cluster}}&var-ds={{datasource}}
+        - title: Pod diagnostics
+          field: pod
+          fieldMatch: contains
+          requiredFields:
+            - container
+            - namespace
+            - pod
+            - cluster
+          source: indexed-or-structured
+          dashboardUrl: /d/grafana-lokiexplore-pod-monitor/pod-monitor?view=diagnostics&var-pod={{value}}&var-pod_query={{logQuery}}&var-namespace={{fields.namespace}}&var-cluster={{fields.cluster}}&var-ds={{datasource}}
     secureJsonData:
       apiKey: secret-key

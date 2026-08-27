@@ -61,33 +61,16 @@ native log-details experience. It does not replace the core log renderer.
 
 ## Compatibility and release constraints
 
-The custom UI was exercised during development with Grafana 12.3.1 and the
-Helm environment uses Grafana 13.1.3. However, the current source manifest still
-contains this dependency range:
+The custom UI and Helm environment target Grafana 13.1.3. The current source
+manifest declares this dependency range:
 
 ```text
 >=11.6.11-0 <12 || >=12.0.10-0 <12.1 || >=12.1.7-0 <12.2 || >=12.2.5-0
 ```
 
-That declaration does **not** include Grafana 12.3.1 or 13.x. Before production
-deployment, use one of these approaches:
-
-1. **Recommended:** update `src/plugin.json`, rebuild, sign, and publish a new
-   archive whose dependency range explicitly includes the Grafana versions you
-   support.
-2. **Internal unsigned deployment only:** extract the release archive and patch
-   its `plugin.json` dependency range before installation.
-
-Example internal-only patch for Grafana 12.3.1:
-
-```bash
-jq '.dependencies.grafanaDependency = ">=12.3.1-0 <12.4.0-0"' \
-  grafana-lokiexplore-app/plugin.json > plugin.json.tmp
-mv plugin.json.tmp grafana-lokiexplore-app/plugin.json
-```
-
-Changing `plugin.json` invalidates an existing plugin signature. A patched
-archive must therefore be treated as unsigned or rebuilt and signed again.
+The final unbounded clause includes Grafana 13.1.3, so no compatibility patch
+is required for this release. Update the range only if a future release needs
+to declare a narrower supported-version boundary.
 
 ## Download and verify
 
@@ -127,14 +110,14 @@ jq '{id, version: .info.version, grafana: .dependencies.grafanaDependency}' \
 
 Expected plugin ID: `grafana-lokiexplore-app`.
 
-## Deploy to Grafana 12.3.1 with Docker
+## Deploy to Grafana 13.1.3 with Docker
 
 Because the current GitHub package is unsigned, Grafana must explicitly allow
 this plugin ID. Build a small internal Grafana image so every container starts
 with the same plugin files.
 
 ```dockerfile
-FROM grafana/grafana:12.3.1
+FROM grafana/grafana:13.1.3
 
 USER root
 COPY --chown=grafana:root grafana-lokiexplore-app \
@@ -257,7 +240,7 @@ If the Loki datasource UID is not `loki`, set `dataSource` to the real UID.
 
 ## Kubernetes deployment
 
-For Kubernetes, use an internal image based on `grafana/grafana:12.3.1` that
+For Kubernetes, use an internal image based on `grafana/grafana:13.1.3` that
 already contains the patched plugin directory. This is more reliable than
 copying the plugin into a running pod.
 
@@ -367,8 +350,8 @@ sudo systemctl start grafana-server
   during release packaging.
 - The packaged version is still `2.5.1`; the KONE date is represented by the Git
   tag, not `plugin.json`.
-- The current manifest does not declare Grafana 12.3.1 or 13.x compatibility;
-  update and rebuild it for a clean production release.
+- The current manifest includes Grafana 13.1.3 through its unbounded
+  `>=12.2.5-0` clause; update and rebuild it only if a narrower range is needed.
 - Dashboard routes must refer to dashboards installed in the same Grafana
   instance.
 - Dashboard rules match indexed labels and/or structured metadata, never parsed

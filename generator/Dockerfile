@@ -9,6 +9,8 @@ COPY --from=collector /otelcol-contrib /otelcol-contrib
 
 WORKDIR /go/src/app
 
+ARG GOPROXY=https://goproxy.cn,direct
+
 # Copy and build the log generator
 COPY go.mod go.sum ./
 COPY *.go ./
@@ -16,7 +18,7 @@ COPY flog/ flog/
 COPY log/ log/
 COPY trace/ trace/
 
-RUN go mod download
+RUN GOPROXY="${GOPROXY}" go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /generator
 
 # Copy the OTEL collector config

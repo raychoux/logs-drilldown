@@ -4,10 +4,10 @@ Capture screenshots after changing user-facing UI so the review includes both be
 
 ## Start the local stack
 
-Use the locally cached Grafana 12.3.1 image:
+Use the locally cached Grafana 13.1.3 image:
 
 ```bash
-GRAFANA_IMAGE=grafana GRAFANA_VERSION=12.3.1 make start
+GRAFANA_IMAGE=grafana GRAFANA_VERSION=13.1.3 make start
 ```
 
 Wait until Grafana is available at `http://localhost:3001/grafana` and the live generator has produced logs.

@@ -139,7 +139,7 @@ describe('getDashboardTargets', () => {
       },
     };
     const frame = createLogsFrame(
-      { node_name: 'S', service_name: 'I', cluster: 'C' },
+      { node_name: 'S', service_name: 'I', cluster: 'S' },
       { node_name: 'cn-shanghai.10.131.116.71', service_name: 'node-exporter', cluster: 'dvplat' }
     );
 

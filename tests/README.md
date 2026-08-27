@@ -83,7 +83,7 @@ run-playwright-with-grafana-dependency: '>=11.6'
 The latest supported Grafana version is defined in `tests/config/grafana-versions-supported.ts`:
 
 ```typescript
-export const GRAFANA_LATEST_SUPPORTED_VERSION = '12.3.1';
+export const GRAFANA_LATEST_SUPPORTED_VERSION = '13.1.3';
 ```
 
 To update the supported version, modify this constant and ensure all tests pass on the new version.

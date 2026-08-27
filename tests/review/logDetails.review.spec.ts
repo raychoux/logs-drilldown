@@ -201,6 +201,38 @@ test('shows a pod monitor dashboard action for pod metadata', async ({ page }, t
   await expect(page).toHaveURL(logsUrl);
 });
 
+test('renders both dashboard rules provisioned by the local Helm environment', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+
+  const explorePage = new ExplorePage(page, testInfo);
+  await page.setViewportSize({ height: 1000, width: 1440 });
+  await explorePage.clearLocalStorage();
+  await explorePage.gotoServicesBreakdownOldUrl('tempo-ingester', reviewFrom, reviewTo);
+  await explorePage.assertNotLoading();
+
+  const nativeLogRow = page.locator('.unwrapped-log-line').nth(1);
+  await expect(nativeLogRow).toBeVisible({ timeout: 45_000 });
+  await nativeLogRow.click();
+
+  const dashboardMenuButton = page.getByTestId(testIds.logDetails.dashboardMenuButton);
+  await expect(dashboardMenuButton).toBeVisible();
+  await dashboardMenuButton.click();
+
+  const dashboardMenuItems = page.getByTestId(testIds.logDetails.dashboardMenuItem);
+  await expect(dashboardMenuItems).toHaveCount(2);
+  await expect(dashboardMenuItems.filter({ hasText: 'Pod overview' })).toBeVisible();
+  await expect(dashboardMenuItems.filter({ hasText: 'Pod diagnostics' })).toBeVisible();
+
+  await dashboardMenuItems.filter({ hasText: 'Pod overview' }).click();
+  const dashboard = page.getByTestId(testIds.logDetails.monitorPodDashboard);
+  await expect(dashboard).toHaveAttribute('data-dashboard-url', /[?&]view=overview(?:&|$)/);
+  await page.getByRole('dialog', { name: 'Log details' }).getByRole('button', { name: 'Close' }).click();
+
+  await dashboardMenuButton.click();
+  await dashboardMenuItems.filter({ hasText: 'Pod diagnostics' }).click();
+  await expect(dashboard).toHaveAttribute('data-dashboard-url', /[?&]view=diagnostics(?:&|$)/);
+});
+
 test('renders real Kubernetes pod metrics and logs in the pod monitor dashboard', async ({ page }, testInfo) => {
   test.skip(process.env.UI_REVIEW_REAL_POD !== '1', 'Run make start and set UI_REVIEW_REAL_POD=1.');
   test.setTimeout(180_000);
