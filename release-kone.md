@@ -1,14 +1,14 @@
-# Logs Drilldown KONE release `v2.5.1-kone-20260826-01`
+# Logs Drilldown KONE release `v2.5.1-kone-20260827-01`
 
 <!-- cspell:words KONE kone raychoux devenv journalctl dvplat cfggs ajuoa -->
 
-- Release date: 2026-08-26
+- Release date: 2026-08-27
 - Source branch: `backup/plugin-logs-list`
 - Plugin ID: `grafana-lokiexplore-app`
 - Packaged plugin version: `2.5.1`
 
 > [!IMPORTANT]
-> `v2.5.1-kone-20260826-01` is the KONE release tag, but the plugin archive and
+> `v2.5.1-kone-20260827-01` is the KONE release tag, but the plugin archive and
 > `plugin.json` still report version `2.5.1`. Do not install the upstream
 > `2.5.1` and this KONE build together: they use the same plugin ID and version.
 
@@ -16,6 +16,19 @@
 
 This release keeps Grafana's native Logs and Table renderers and extends the
 native log-details experience. It does not replace the core log renderer.
+
+## Changes since `v2.5.1-kone-20260826-01`
+
+- Adds two locally provisioned pod dashboard actions: **Pod overview** and
+  **Pod diagnostics**.
+- Adds the `{{tempoDatasource}}` dashboard URL template, resolved from the
+  active Loki datasource's trace derived field.
+- Makes the Node Exporter dashboard rule require a cluster value, supplies the
+  selected row's cluster dynamically, and reliably removes the node-name prefix.
+- Sets local development, review, and Helm environments to Grafana 13.1.3 and
+  lets restricted-network generator builds use `goproxy.cn` by default.
+- Extends dashboard-rule and visual-review coverage, and limits pre-commit
+  ESLint to staged source files to reduce commit latency.
 
 ### Log-details improvements
 
@@ -77,7 +90,7 @@ to declare a narrower supported-version boundary.
 When the GitHub release is published, download the ZIP and checksum from:
 
 ```text
-https://github.com/raychoux/logs-drilldown/releases/tag/v2.5.1-kone-20260826-01
+https://github.com/raychoux/logs-drilldown/releases/tag/v2.5.1-kone-20260827-01
 ```
 
 Using GitHub CLI:
@@ -86,7 +99,7 @@ Using GitHub CLI:
 mkdir -p /tmp/logs-drilldown-kone
 cd /tmp/logs-drilldown-kone
 
-gh release download v2.5.1-kone-20260826-01 \
+gh release download v2.5.1-kone-20260827-01 \
   --repo raychoux/logs-drilldown \
   --pattern 'grafana-lokiexplore-app-2.5.1.zip*'
 ```
