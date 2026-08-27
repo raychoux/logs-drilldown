@@ -134,8 +134,8 @@ describe('getDashboardTargets', () => {
       source: 'structured',
       title: 'Node Exporter',
       valueTransform: {
-        regex: '^[^.]+\\.(\\d{1,3}(?:\\.\\d{1,3}){3})$',
-        replacement: '$1',
+        regex: '^[^.]+\\.',
+        replacement: '',
       },
     };
     const frame = createLogsFrame(

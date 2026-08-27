@@ -204,8 +204,8 @@ A parsed field or indexed label with the same name does not satisfy a rule whose
     "requiredFields": ["cluster"],
     "source": "structured",
     "valueTransform": {
-      "regex": "^[^.]+\\.(\\d{1,3}(?:\\.\\d{1,3}){3})$",
-      "replacement": "$1"
+      "regex": "^[^.]+\\.",
+      "replacement": ""
     },
     "dashboardUrl": "/d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster={{fields.cluster}}&var-instance={{value}}:9100&refresh=30s"
   }
@@ -248,8 +248,8 @@ apps:
             - cluster
           source: structured
           valueTransform:
-            regex: '^[^.]+\.(\d{1,3}(?:\.\d{1,3}){3})$'
-            replacement: '$1'
+            regex: '^[^.]+\.'
+            replacement: ''
           dashboardUrl: /d/dvplat-7d5771asa7f451fb7753/node-exporter-nodes?orgId=3&from=now-1h&to=now&timezone=browser&var-datasource=cfggs9cj1ajuoa&var-cluster={{fields.cluster}}&var-instance={{value}}:9100&refresh=30s
 ```
 
